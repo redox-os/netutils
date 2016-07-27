@@ -1,0 +1,20 @@
+[package]
+name = "netutils"
+version = "0.1.0"
+authors = ["Jeremy Soller <jackpot51@gmail.com>"]
+
+[[bin]]
+name = "dhcpd"
+path = "src/dhcpd/main.rs"
+
+[[bin]]
+name = "dnsd"
+path = "src/dnsd/main.rs"
+
+[[bin]]
+name = "nc"
+path = "src/nc/main.rs"
+
+[[bin]]
+name = "wget"
+path = "src/wget/main.rs"
