@@ -1,5 +1,3 @@
-extern crate system;
-
 use std::env;
 use std::io::{stdin, Read, Write, Result};
 use std::str;
