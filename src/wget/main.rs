@@ -29,12 +29,20 @@ fn main() {
             write!(stderr(), "* Waiting for response\n").unwrap();
 
             let mut response = Vec::new();
-            let count = stream.read_to_end(&mut response).unwrap();
 
-            write!(stderr(), "* Received {} bytes\n", count).unwrap();
+            loop {
+                let mut buf = [0; 65536];
+                let count = stream.read(&mut buf).unwrap();
+                if count == 0 {
+                    break;
+                }
+                response.extend_from_slice(&buf[.. count]);
+            }
+
+            write!(stderr(), "* Received {} bytes\n", response.len()).unwrap();
 
             let mut headers = true;
-            for line in unsafe { str::from_utf8_unchecked(&response[.. count]) }.lines() {
+            for line in unsafe { str::from_utf8_unchecked(&response) }.lines() {
                 if headers {
                     if line.is_empty() {
                         headers = false;
