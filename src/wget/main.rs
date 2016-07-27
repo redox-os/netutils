@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{stderr, Read, Write};
+use std::io::{stderr, stdout, Read, Write};
 use std::net::TcpStream;
 use std::process;
 use std::str;
@@ -41,18 +41,19 @@ fn main() {
 
             write!(stderr(), "* Received {} bytes\n", response.len()).unwrap();
 
-            let mut headers = true;
-            for line in unsafe { str::from_utf8_unchecked(&response) }.lines() {
-                if headers {
-                    if line.is_empty() {
-                        headers = false;
-                    } else {
-                        write!(stderr(), "> {}\n", line).unwrap();
-                    }
-                } else {
-                    println!("{}", line);
+            let mut header_end = 0;
+            while header_end < response.len() {
+                if response[header_end..].starts_with(b"\r\n\r\n") {
+                    break;
                 }
+                header_end += 1;
             }
+
+            for line in unsafe { str::from_utf8_unchecked(&response[..header_end]) }.lines() {
+                write!(stderr(), "> {}\n", line).unwrap();
+            }
+
+            stdout().write(&response[header_end + 4 ..]).unwrap();
         } else {
             write!(stderr(), "wget: unknown scheme '{}'\n", scheme).unwrap();
             process::exit(1);
