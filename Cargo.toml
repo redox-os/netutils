@@ -12,6 +12,10 @@ name = "dnsd"
 path = "src/dnsd/main.rs"
 
 [[bin]]
+name = "irc"
+path = "src/irc/main.rs"
+
+[[bin]]
 name = "nc"
 path = "src/nc/main.rs"
 
