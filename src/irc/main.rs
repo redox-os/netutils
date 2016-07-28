@@ -103,10 +103,31 @@ fn main() {
         }
 
         for line in unsafe { str::from_utf8_unchecked(&buffer[..count]) }.lines() {
-            if line.starts_with("PING") {
-                socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
+            let mut args = line.split(' ');
+
+            let prefix = if line.starts_with(':') {
+                args.next()
             } else {
-                println!("{}", line);
+                None
+            };
+
+            if let Some(cmd) = args.next() {
+                match cmd {
+                    "PING" => {
+                        socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
+                    },
+                    "PRIVMSG" => {
+                        let username = prefix.unwrap_or("").split(':').nth(1).unwrap_or("").split("!").next().unwrap_or("");
+                        let channel = args.next().unwrap_or("");
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[7m{}: {}: {}\x1B[27m", channel, username, message);
+                    },
+                    _ => println!("{}", line)
+                }
             }
         }
     }
