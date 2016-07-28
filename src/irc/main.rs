@@ -136,14 +136,37 @@ fn main() {
                             let channel_number = (channels_lock.1).0;     
                             channels_lock.0.get_mut(channel_number).unwrap().dump_buf();             
                         },
+                        "/goto" => {
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            if let Some(n) = args.next() {
+                                let n = n.parse::<usize>();
+                                if n.is_err() {
+                                    println!("irc: GOTO: You must provide the channel's number. You can find the number by using /list");
+                                } else {
+                                    let n = n.unwrap();
+                                    if n < 1 || n > channels_lock.0.len() + 1 {
+                                        println!("irc: GOTO: This channel number is invalid. You can find the number by using /list");
+                                    } else {
+                                        channels_lock.1 = Wrapping(n - 1);
+                                        // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
+                                        // channel ID
+                                        channels_lock.1 %= Wrapping(channels_lock.0.len());       
+                                        println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                                    }   
+                                }
+                            } else {
+                                println!("irc: GOTO: You must provide the channel's number. You can find it by using /list");
+                            }
+                        }
                         "/list" => {
                             let mut channels_lock = channels.lock().unwrap();
                             println!("irc: Currently connected to:");
                             for (i, channel) in channels_lock.0.iter().enumerate() {
                                 if i == (channels_lock.1).0 {
-                                    println!("   > {}", channel.get_name());
+                                    println!("{}. > {}", i + 1, channel.get_name());
                                 } else { 
-                                    println!("     {}, {} unread", channel.get_name(), channel.unread);
+                                    println!("{}.   {}, {} unread", i + 1, channel.get_name(), channel.unread);
                                 }
                             }
                         },
@@ -158,12 +181,25 @@ fn main() {
                                 let channel_number = (channels_lock.1).0;
 
                                 channels_lock.0.remove(channel_number);
+                                (channels_lock.1).0 = channel_number - 1;
                             } else {
                                 println!("irc: LEAVE: You aren't connected to any channels.")
                             }
                         },
+                        "/help" | "/commands" => {
+                            println!("irc: Available commands:");
+                            println!("     /join <channel_name> - Joins a channel");
+                            println!("     /list - Lists channels you're connected to");
+                            println!("     /next - Goes to the next channel");
+                            println!("     /back - Goes to the earlier channel");
+                            println!("     /goto <channel_number> - Goes to a specified channel");
+                            println!("     /msg <user> <message> - Sends a private message");
+                            println!("     /leave or /part - Leaves a channel");
+                            println!("     /quit or /exit - Exits this program");
+                            println!("     /help or /commands - Shows this help message");
+                        }
                         "/quit" | "/exit" => break 'stdin,
-                        _ => println!("irc: {}: Unknown command.", cmd)
+                        _ => println!("irc: {}: Unknown command. Try /help", cmd)
                     }
                 }
             } else if ! line.is_empty() {
