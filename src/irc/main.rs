@@ -46,7 +46,10 @@ fn main() {
     socket_write.send(register.as_bytes()).unwrap();
 
     thread::spawn(move || {
-        let mut chan_option = None;
+        use std::num::Wrapping;
+
+        let mut channels: Vec<String> = vec![];
+        let mut current_channel: Wrapping<usize> = Wrapping(0);
         'stdin: loop {
             let mut line_original = String::new();
             if stdin().read_line(&mut line_original).unwrap() == 0 {
@@ -66,27 +69,40 @@ fn main() {
                         } else {
                             println!("irc: MSG: No message target given, use /msg target_user message.");
                         },
-                        "/join" => if let Some(ref chan) = chan_option {
-                            println!("irc: JOIN: You already are on {}.", chan);
-                        } else {
+                        "/join" => {
                             if let Some(chan) = args.next() {
-                                chan_option = Some(chan.to_string());
+                                channels.push(chan.to_string());
+                                current_channel = Wrapping(channels.len() - 1);
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                             } else {
                                 println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
                             }
                         },
-                        "/leave" => if let Some(chan) = chan_option.take() {
-                            socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
+                        "/next" => {
+                            current_channel += Wrapping(1);
+                            current_channel %= Wrapping(channels.len());
+                            println!("irc: Talking on {}", channels.get(current_channel.0).unwrap());
+                        },
+                        "/back" => {
+                            current_channel -= Wrapping(1);
+                            current_channel %= Wrapping(channels.len());       
+                            println!("irc: Talking on {}", channels.get(current_channel.0).unwrap());                     
+                        },
+                        "/leave" | "/part" => if channels.get(current_channel.0).is_some() {
+                            {
+                                let chan = channels.get(current_channel.0).unwrap();
+                                socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
+                            }
+                            channels.remove(current_channel.0);
                         } else {
                             println!("irc: LEAVE: You aren't connected to any channels.")
                         },
-                        "/quit" => break 'stdin,
+                        "/quit" | "/exit" => break 'stdin,
                         _ => println!("irc: {}: Unknown command.", cmd)
                     }
                 }
             } else if ! line.is_empty() {
-                if let Some(ref chan) = chan_option {
+                if let Some(ref chan) = channels.get(current_channel.0) {
                     socket_write.send(format!("PRIVMSG {} :{}\r\n", chan, line).as_bytes()).unwrap();
                 } else {
                     println!("irc: You haven't joined a channel yet, use /join #chan_name");
@@ -167,7 +183,7 @@ fn main() {
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[7m{}: {}\x1B[27m", source, message);
+                        println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                     },
                     "QUIT" => {
                         let parts: Vec<&str> = args.collect();
