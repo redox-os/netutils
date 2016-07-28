@@ -2,7 +2,7 @@ use std::env;
 use std::io::{stdin, Read, Write, Result};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::str;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use std::cell::UnsafeCell;
@@ -32,8 +32,41 @@ impl Socket {
     }
 }
 
+/// Channel struct used to store currently open channels,
+/// and a buffer of messages received when the channel
+/// wasn't focused on
+#[derive(Clone)]
+pub struct Channel {
+    pub name: String,
+    pub buffer: String,
+}
+
+impl Channel {
+    fn new(name: String) -> Self {
+        Channel {
+            name: name,
+            buffer: String::new(),
+        }
+    }
+
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn push(&mut self, arg: &str) {
+        self.buffer.push_str(arg);
+    }
+
+    fn dump_buf(&mut self) {
+        print!("{}", self.buffer);
+        self.buffer = String::new();
+    }
+}
+
 
 fn main() {
+    use std::num::Wrapping;
+
     let mut args = env::args().skip(1);
 
     let nick = args.next().expect("No nickname provided");
@@ -41,16 +74,17 @@ fn main() {
     let socket_write = Arc::new(Socket::connect("irc.mozilla.org:6667").expect("Failed to connect to irc.mozilla.org"));
     let socket_read = socket_write.clone();
 
+    let channels: Arc<Mutex<(Vec<Channel>, Wrapping<usize>)>> = Arc::new(Mutex::new((vec![], Wrapping(0))));
+    let channels_thread = channels.clone(); // Reference sent out to the thread
+
     let register = format!("NICK {}\r\nUSER {} 0 * :{}\r\n", nick, nick, nick);
     print!("{}", register);
     socket_write.send(register.as_bytes()).unwrap();
 
     thread::spawn(move || {
-        use std::num::Wrapping;
-
-        let mut channels: Vec<String> = vec![];
-        let mut current_channel: Wrapping<usize> = Wrapping(0);
+        let channels = channels_thread;
         'stdin: loop {
+
             let mut line_original = String::new();
             if stdin().read_line(&mut line_original).unwrap() == 0 {
                 println!("END OF INPUT");
@@ -71,39 +105,58 @@ fn main() {
                         },
                         "/join" => {
                             if let Some(chan) = args.next() {
-                                channels.push(chan.to_string());
-                                current_channel = Wrapping(channels.len() - 1);
+                                let channel = Channel::new(chan.to_string());
+                                let mut channels_lock = channels.lock().unwrap();
+
+                                channels_lock.0.push(channel);
+                                channels_lock.1 = Wrapping(channels_lock.0.len() - 1);
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                             } else {
                                 println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
                             }
                         },
                         "/next" => {
-                            current_channel += Wrapping(1);
-                            current_channel %= Wrapping(channels.len());
-                            println!("irc: Talking on {}", channels.get(current_channel.0).unwrap());
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            channels_lock.1 += Wrapping(1);
+                            channels_lock.1 %= Wrapping(channels_lock.0.len());
+                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                            let channel_number = (channels_lock.1).0;
+                            channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
                         },
                         "/back" => {
-                            current_channel -= Wrapping(1);
-                            current_channel %= Wrapping(channels.len());       
-                            println!("irc: Talking on {}", channels.get(current_channel.0).unwrap());                     
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            channels_lock.1 -= Wrapping(1);
+                            channels_lock.1 %= Wrapping(channels_lock.0.len());       
+                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);  
+                            let channel_number = (channels_lock.1).0;     
+                            channels_lock.0.get_mut(channel_number).unwrap().dump_buf();             
                         },
-                        "/leave" | "/part" => if channels.get(current_channel.0).is_some() {
-                            {
-                                let chan = channels.get(current_channel.0).unwrap();
-                                socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
+                        "/leave" | "/part" => { 
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            if channels_lock.0.get((channels_lock.1).0).is_some() {
+                                {
+                                    let chan = channels_lock.0.get((channels_lock.1).0).unwrap().get_name();
+                                    socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
+                                }
+                                let channel_number = (channels_lock.1).0;
+
+                                channels_lock.0.remove(channel_number);
+                            } else {
+                                println!("irc: LEAVE: You aren't connected to any channels.")
                             }
-                            channels.remove(current_channel.0);
-                        } else {
-                            println!("irc: LEAVE: You aren't connected to any channels.")
                         },
                         "/quit" | "/exit" => break 'stdin,
                         _ => println!("irc: {}: Unknown command.", cmd)
                     }
                 }
             } else if ! line.is_empty() {
-                if let Some(ref chan) = channels.get(current_channel.0) {
-                    socket_write.send(format!("PRIVMSG {} :{}\r\n", chan, line).as_bytes()).unwrap();
+                let channels_lock = channels.lock().unwrap();
+
+                if let Some(ref chan) = channels_lock.0.get((channels_lock.1).0) {
+                    socket_write.send(format!("PRIVMSG {} :{}\r\n", chan.name, line).as_bytes()).unwrap();
                 } else {
                     println!("irc: You haven't joined a channel yet, use /join #chan_name");
                 }
@@ -177,13 +230,28 @@ fn main() {
                         socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
                     },
                     "PRIVMSG" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let _target = args.next().unwrap_or("");
+
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|chan| {
+                            chan.get_name() == _target
+                        }).next(); 
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
+
+                        if channel.is_some(){
+                            let mut channel = channel.unwrap();
+                            //println!("Message hidden"); // this for testing
+                            channel.buffer.push_str(&format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message));
+                        } else {
+                            println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
+                        }
                     },
                     "QUIT" => {
                         let parts: Vec<&str> = args.collect();
@@ -207,6 +275,14 @@ fn main() {
                     }
                 }
             }
+        }
+
+        let mut channels_lock = channels.lock().unwrap();
+        let channel_number = (channels_lock.1).0;
+        let mut channel: Option<&mut Channel> = channels_lock.0.get_mut(channel_number);
+        if channel.is_some() {
+            let mut channel: &mut Channel = channel.unwrap();
+            channel.dump_buf();
         }
     }
 }
