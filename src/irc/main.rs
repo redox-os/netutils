@@ -169,6 +169,14 @@ fn main() {
                         }
                         println!("\x1B[7m{}: {}\x1B[27m", source, message);
                     },
+                    "QUIT" => {
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
+                    },
                     "372" => {
                         let _target = args.next().unwrap_or("");
                         let parts: Vec<&str> = args.collect();
