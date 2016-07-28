@@ -66,11 +66,15 @@ fn main() {
                         } else {
                             println!("MSG: NO TARGET");
                         },
-                        "/join" => if let Some(chan) = args.next() {
-                            chan_option = Some(chan.to_string());
-                            socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
+                        "/join" => if let Some(ref chan) = chan_option {
+                            println!("JOIN: ALREADY ON {}", chan);
                         } else {
-                            println!("JOIN: NO CHANNEL");
+                            if let Some(chan) = args.next() {
+                                chan_option = Some(chan.to_string());
+                                socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
+                            } else {
+                                println!("JOIN: NO CHANNEL");
+                            }
                         },
                         "/leave" => if let Some(chan) = chan_option.take() {
                             socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
@@ -111,22 +115,64 @@ fn main() {
                 None
             };
 
+            let source = prefix.unwrap_or("").split(':').nth(1).unwrap_or("").split("!").next().unwrap_or("");
+
             if let Some(cmd) = args.next() {
                 match cmd {
-                    "PING" => {
-                        socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
-                    },
-                    "PRIVMSG" => {
-                        let username = prefix.unwrap_or("").split(':').nth(1).unwrap_or("").split("!").next().unwrap_or("");
-                        let channel = args.next().unwrap_or("");
+                    "JOIN" => {
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[7m{}: {}: {}\x1B[27m", channel, username, message);
+                        println!("\x1B[1m{} joined {}\x1B[21m", source, message);
                     },
-                    _ => println!("{}", line)
+                    "PART" => {
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[1m{} parted {}\x1B[21m", source, message);
+                    },
+                    "MODE" => {
+                        let target = args.next().unwrap_or("");
+                        let mode = args.next().unwrap_or("");
+                        println!("\x1B[1m{} set to mode {}\x1B[21m", target, mode);
+                    },
+                    "NOTICE" => {
+                        let _target = args.next().unwrap_or("");
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[7m\x1B[1m{}: {}\x1B[21m\x1B[27m", source, message);
+                    },
+                    "PING" => {
+                        socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
+                    },
+                    "PRIVMSG" => {
+                        let _target = args.next().unwrap_or("");
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[7m{}: {}\x1B[27m", source, message);
+                    },
+                    "372" => {
+                        let _target = args.next().unwrap_or("");
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[1m{}\x1B[21m", message);
+                    },
+                    _ => {
+                        //println!("{}", line);
+                    }
                 }
             }
         }
