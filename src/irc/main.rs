@@ -103,11 +103,10 @@ fn main() {
         }
 
         for line in unsafe { str::from_utf8_unchecked(&buffer[..count]) }.lines() {
-            println!("{}", line);
             if line.starts_with("PING") {
-                let pong = format!("PONG {}\r\n", nick);
-                print!("{}", pong);
-                socket_read.send(pong.as_bytes()).unwrap();
+                socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
+            } else {
+                println!("{}", line);
             }
         }
     }
