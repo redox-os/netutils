@@ -119,6 +119,14 @@ fn main() {
 
             if let Some(cmd) = args.next() {
                 match cmd {
+                    "ERROR" => {
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[1mERROR: {}\x1B[21m", message);
+                    },
                     "JOIN" => {
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
@@ -126,14 +134,6 @@ fn main() {
                             message.remove(0);
                         }
                         println!("\x1B[1m{} joined {}\x1B[21m", source, message);
-                    },
-                    "PART" => {
-                        let parts: Vec<&str> = args.collect();
-                        let mut message = parts.join(" ");
-                        if message.starts_with(':') {
-                            message.remove(0);
-                        }
-                        println!("\x1B[1m{} parted {}\x1B[21m", source, message);
                     },
                     "MODE" => {
                         let target = args.next().unwrap_or("");
@@ -148,6 +148,14 @@ fn main() {
                             message.remove(0);
                         }
                         println!("\x1B[7m\x1B[1m{}: {}\x1B[21m\x1B[27m", source, message);
+                    },
+                    "PART" => {
+                        let parts: Vec<&str> = args.collect();
+                        let mut message = parts.join(" ");
+                        if message.starts_with(':') {
+                            message.remove(0);
+                        }
+                        println!("\x1B[1m{} parted {}\x1B[21m", source, message);
                     },
                     "PING" => {
                         socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
@@ -171,7 +179,7 @@ fn main() {
                         println!("\x1B[1m{}\x1B[21m", message);
                     },
                     _ => {
-                        //println!("{}", line);
+                        println!("{}", line);
                     }
                 }
             }
