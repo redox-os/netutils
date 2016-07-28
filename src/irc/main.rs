@@ -39,6 +39,7 @@ impl Socket {
 pub struct Channel {
     pub name: String,
     pub buffer: String,
+    pub unread: u32,
 }
 
 impl Channel {
@@ -46,6 +47,7 @@ impl Channel {
         Channel {
             name: name,
             buffer: String::new(),
+            unread: 0,
         }
     }
 
@@ -60,6 +62,7 @@ impl Channel {
     fn dump_buf(&mut self) {
         print!("{}", self.buffer);
         self.buffer = String::new();
+        self.unread = 0;
     }
 }
 
@@ -132,6 +135,17 @@ fn main() {
                             println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);  
                             let channel_number = (channels_lock.1).0;     
                             channels_lock.0.get_mut(channel_number).unwrap().dump_buf();             
+                        },
+                        "/list" => {
+                            let mut channels_lock = channels.lock().unwrap();
+                            println!("irc: Currently connected to:");
+                            for (i, channel) in channels_lock.0.iter().enumerate() {
+                                if i == (channels_lock.1).0 {
+                                    println!("   > {}", channel.get_name());
+                                } else { 
+                                    println!("     {}, {} unread", channel.get_name(), channel.unread);
+                                }
+                            }
                         },
                         "/leave" | "/part" => { 
                             let mut channels_lock = channels.lock().unwrap();
@@ -249,6 +263,7 @@ fn main() {
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push_str(&format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message));
+                            channel.unread += 1;             
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                         }
