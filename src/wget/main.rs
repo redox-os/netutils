@@ -10,19 +10,22 @@ fn main() {
         if scheme == "http" {
             let mut parts = reference.split('/').skip(2); //skip first two slashes
             let remote = parts.next().unwrap_or("");
+            let mut remote_parts = remote.split(':');
+            let host = remote_parts.next().unwrap_or("");
+            let port = remote_parts.next().unwrap_or("").parse::<u16>().unwrap_or(80);
             let mut path = parts.next().unwrap_or("").to_string();
             for part in parts {
                 path.push('/');
                 path.push_str(part);
             }
 
-            write!(stderr(), "* Connecting to {}\n", remote).unwrap();
+            write!(stderr(), "* Connecting to {}:{}\n", host, port).unwrap();
 
-            let mut stream = TcpStream::connect(&remote).unwrap();
+            let mut stream = TcpStream::connect((host, port)).unwrap();
 
             write!(stderr(), "* Requesting {}\n", path).unwrap();
 
-            let request = format!("GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, env::args().nth(2).unwrap_or(remote.to_string()));
+            let request = format!("GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, host);
             stream.write(request.as_bytes()).unwrap();
             stream.flush().unwrap();
 

@@ -38,7 +38,7 @@ fn main() {
 
     let nick = args.next().expect("No nickname provided");
 
-    let socket_write = Arc::new(Socket::connect("54.85.60.193:6667").expect("Failed to connect to irc.mozilla.org"));
+    let socket_write = Arc::new(Socket::connect("irc.mozilla.org:6667").expect("Failed to connect to irc.mozilla.org"));
     let socket_read = socket_write.clone();
 
     let register = format!("NICK {}\r\nUSER {} 0 * :{}\r\n", nick, nick, nick);
