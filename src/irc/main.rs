@@ -64,32 +64,32 @@ fn main() {
                             let message = parts.join(" ");
                             socket_write.send(format!("PRIVMSG {} :{}\r\n", target, message).as_bytes()).unwrap();
                         } else {
-                            println!("MSG: NO TARGET");
+                            println!("irc: MSG: No message target given, use /msg target_user message.");
                         },
                         "/join" => if let Some(ref chan) = chan_option {
-                            println!("JOIN: ALREADY ON {}", chan);
+                            println!("irc: JOIN: You already are on {}.", chan);
                         } else {
                             if let Some(chan) = args.next() {
                                 chan_option = Some(chan.to_string());
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                             } else {
-                                println!("JOIN: NO CHANNEL");
+                                println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
                             }
                         },
                         "/leave" => if let Some(chan) = chan_option.take() {
                             socket_write.send(format!("PART {}\r\n", chan).as_bytes()).unwrap();
                         } else {
-                            println!("LEAVE: NOT ON CHANNEL")
+                            println!("irc: LEAVE: You aren't connected to any channels.")
                         },
                         "/quit" => break 'stdin,
-                        _ => println!("{}: UNKNOWN COMMAND", cmd)
+                        _ => println!("irc: {}: Unknown command.", cmd)
                     }
                 }
             } else if ! line.is_empty() {
                 if let Some(ref chan) = chan_option {
                     socket_write.send(format!("PRIVMSG {} :{}\r\n", chan, line).as_bytes()).unwrap();
                 } else {
-                    println!("JOIN A CHANNEL");
+                    println!("irc: You haven't joined a channel yet, use /join #chan_name");
                 }
             }
         }
