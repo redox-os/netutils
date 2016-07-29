@@ -418,7 +418,6 @@ fn main() {
                         for user in &users {
                             channel.push_user(user);
                         }
-                        println!("{} {:?}", chan, users);
                     }
                     "MODE" => {
                         let target = args.next().unwrap_or("");
