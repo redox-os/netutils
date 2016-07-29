@@ -1,3 +1,7 @@
+extern crate termion;
+
+use termion::{color, style};
+
 use std::env;
 use std::io::{stdin, Read, Write, Result};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -32,16 +36,6 @@ impl Socket {
     }
 }
 
-/// Channel struct used to store currently open channels,
-/// and a buffer of messages received when the channel
-/// wasn't focused on
-#[derive(Clone)]
-pub struct Channel {
-    pub name: String,
-    pub buffer: Vec<Message>,
-    pub unread: u32,
-}
-
 #[derive(Debug, Clone)]
 pub enum Message {
     Chat { user: String, message: String },
@@ -50,12 +44,25 @@ pub enum Message {
     Parted { user: String, message: String }
 }
 
+/// Channel struct used to store currently open channels,
+/// and a buffer of messages received when the channel
+/// wasn't focused on
+#[derive(Clone)]
+pub struct Channel {
+    pub name: String,
+    pub buffer: Vec<Message>,
+    pub unread: u32,
+    /// Has the nickname been mentioned since last look at the channel?
+    pub mentioned: bool,
+}
+
 impl Channel {
     fn new(name: String) -> Self {
         Channel {
             name: name,
             buffer: vec![],
             unread: 0,
+            mentioned: false,
         }
     }
 
@@ -71,10 +78,11 @@ impl Channel {
     fn dump_buf(&mut self) {
         for message in self.buffer.clone() {
             match message {
-                Message::Chat{user, message} => println!("\x1B[7m{}: {}\x1B[27m", user, message),
+                Message::Chat{user, message} => println!("{}{}{}: {}{}", style::Bold, color::Fg(color::Green), user, message, style::Reset),
                 Message::Info{message} => println!("info: {}", message),
                 Message::Joined{user, message} => {
-                    print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
+                    //print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
+                    print!("{}{} joined {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
                         print!("\n");
                     } else {
@@ -82,7 +90,7 @@ impl Channel {
                     }
                 },
                 Message::Parted{user, message} => {
-                    print!("\x1B[1m{} parted {}\x1B[21m", user, self.get_name());
+                    print!("{}{} parted {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
                         print!("\n");
                     } else {
@@ -93,6 +101,7 @@ impl Channel {
         }
         self.buffer = vec![];
         self.unread = 0;
+        self.mentioned = false;
     }
 }
 
@@ -197,9 +206,13 @@ fn main() {
                             println!("irc: Currently connected to:");
                             for (i, channel) in channels_lock.0.iter().enumerate() {
                                 if i == (channels_lock.1).0 {
-                                    println!("{}. > {}", i + 1, channel.get_name());
-                                } else { 
-                                    println!("{}.   {}, {} unread", i + 1, channel.get_name(), channel.unread);
+                                    println!("{}{}. > {}{}", color::Fg(color::Green), i + 1, channel.get_name(), style::Reset);
+                                } else if channel.mentioned == true {
+                                    println!("{}{}.     {}, {} unread, you were mentioned{}", color::Fg(color::Red), i + 1, channel.get_name(), channel.unread, style::Reset);
+                                } else if channel.unread > 0 { 
+                                    println!("{}.     {}, {}{}{} unread{}", i + 1, channel.get_name(), color::Fg(color::Yellow), style::Bold, channel.unread, style::Reset);
+                                } else {
+                                    println!("{}.     {}, {} unread", i + 1, channel.get_name(), channel.unread);
                                 }
                             }
                         },
@@ -411,11 +424,17 @@ fn main() {
                         }
 
                         if channel.is_some(){
+
+                            let message = message.clone();
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
-                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
+                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message.clone()});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;  
+
+                            if message.contains(&nick) {
+                                channel.mentioned = true;
+                            }           
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                         }

@@ -22,3 +22,6 @@ path = "src/nc/main.rs"
 [[bin]]
 name = "wget"
 path = "src/wget/main.rs"
+
+[dependencies]
+termion = "1.0"
