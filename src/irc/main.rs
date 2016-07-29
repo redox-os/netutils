@@ -136,7 +136,7 @@ fn main() {
                         } else {
                             println!("irc: MSG: No message target given, use /msg target_user message.");
                         },
-                        "/join" => {
+                        "/join" | "/j" => {
                             if let Some(chan) = args.next() {
                                 let channel = Channel::new(chan.to_string());
                                 let mut channels_lock = channels.lock().unwrap();
@@ -175,7 +175,7 @@ fn main() {
                                     println!("irc: GOTO: You must provide the channel's number. You can find the number by using /list");
                                 } else {
                                     let n = n.unwrap();
-                                    if n < 1 || n > channels_lock.0.len() + 1 {
+                                    if n < 1 || n > channels_lock.0.len() {
                                         println!("irc: GOTO: This channel number is invalid. You can find the number by using /list");
                                     } else {
                                         channels_lock.1 = Wrapping(n - 1);
@@ -203,7 +203,7 @@ fn main() {
                                 }
                             }
                         },
-                        "/leave" | "/part" => { 
+                        "/leave" | "/part" | "/p" => { 
                             let mut channels_lock = channels.lock().unwrap();
 
                             if channels_lock.0.get((channels_lock.1).0).is_some() {
@@ -232,7 +232,32 @@ fn main() {
                             println!("     /help or /commands - Shows this help message");
                         }
                         "/quit" | "/exit" => break 'stdin,
-                        _ => println!("irc: {}: Unknown command. Try /help", cmd)
+                        // Next one also matches short form of goto, /<chan_number>
+                        _ => {
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            // \/ this may PANIC!
+                            let mut cmd = cmd.to_string();
+                            cmd.remove(0);
+                            let n = cmd.parse::<usize>();
+                            if n.is_err() {
+                                println!("irc: {}: Unknown command. Try /help", cmd)
+                            } else {
+                                let n = n.unwrap();
+                                if n < 1 || n > channels_lock.0.len() {
+                                    println!("irc: GOTO: This channel number is invalid. You can find the number by using /list");
+                                } else {
+                                    channels_lock.1 = Wrapping(n - 1);
+                                    // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
+                                    // channel ID
+                                    channels_lock.1 %= Wrapping(channels_lock.0.len());       
+                                    println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+
+                                    let channel_number = (channels_lock.1).0;
+                                    channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
+                                }   
+                            }
+                        }
                     }
                 }
             } else if ! line.is_empty() {
@@ -289,6 +314,7 @@ fn main() {
                         }
                         let message_split: Vec<&str> = message.split(":").collect();
                         let _target = message_split[0].to_string();
+                        let _target = _target.trim(); // without trimming I got issues in PART, put one here just in case
                         let message = message_split.get(1).unwrap_or(&"").to_string();
 
                         let channel: Option<&mut Channel>;
