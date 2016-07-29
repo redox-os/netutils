@@ -196,6 +196,8 @@ fn main() {
                             let mut channels_lock = channels.lock().unwrap();
 
                             if channels_lock.0.get((channels_lock.1).0).is_some() {
+                                let chan = channels_lock.0.get((channels_lock.1).0).unwrap().get_name();
+                                socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                                 println!("irc: Users in this channel: \n{}", channels_lock.0.get((channels_lock.1).0).unwrap().users());
                             } else {
                                 println!("irc: USERS: You aren't connected to any channels.")
@@ -415,6 +417,7 @@ fn main() {
                         let channel = channel.unwrap(); 
 
                         let users = parts;
+                        channel.users = vec![];
                         for user in &users {
                             channel.push_user(user);
                         }
