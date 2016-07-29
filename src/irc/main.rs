@@ -41,7 +41,8 @@ pub enum Message {
     Chat { user: String, message: String },
     Info { message: String },
     Joined { user: String, message: String },
-    Parted { user: String, message: String }
+    Parted { user: String, message: String },
+    Quit { user: String, message: String },
 }
 
 /// Channel struct used to store currently open channels,
@@ -52,6 +53,7 @@ pub struct Channel {
     pub name: String,
     pub buffer: Vec<Message>,
     pub unread: u32,
+    pub users: Vec<String>,
     /// Has the nickname been mentioned since last look at the channel?
     pub mentioned: bool,
 }
@@ -62,6 +64,7 @@ impl Channel {
             name: name,
             buffer: vec![],
             unread: 0,
+            users: vec![],
             mentioned: false,
         }
     }
@@ -97,11 +100,43 @@ impl Channel {
                         println!(" ({})", message);
                     }
                 },
+                Message::Quit{user, message} => {
+                    print!("{}{} Quit ({}){}\n", color::Fg(color::Blue), user, message, style::Reset);
+                },
             }
         }
         self.buffer = vec![];
         self.unread = 0;
         self.mentioned = false;
+    }
+
+    fn users(&self) -> String {
+        let mut buffer = "".to_string();
+        for user in &self.users {
+            buffer.push_str(&format!("{}, ", user));
+        }
+
+        buffer
+    }
+
+    fn has_user(&self, username: &str) -> bool {
+        self.users.clone().into_iter().find(|list_user| {list_user == username}).is_some()
+    }
+
+    /// Pushes a new user to the channel users list, unless that user is already on the list.
+    fn push_user(&mut self, username: &str) {
+        let on_list = self.users.clone().into_iter().find(|list_user| {list_user == username}).is_some();
+        if !on_list {
+            self.users.push(username.to_string());
+        }
+    }
+
+    /// Removes the user from the users list, do nothing if the user isn't on the list.
+    fn remove_user(&mut self, username: &str) {
+        let on_list = self.users.clone().into_iter().position(|list_user| {list_user == username});
+        if on_list.is_some() {
+            self.users.remove(on_list.unwrap());
+        }
     }
 }
 
@@ -155,6 +190,15 @@ fn main() {
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                             } else {
                                 println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
+                            }
+                        },
+                        "/users" => {
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            if channels_lock.0.get((channels_lock.1).0).is_some() {
+                                println!("irc: Users in this channel: \n{}", channels_lock.0.get((channels_lock.1).0).unwrap().users());
+                            } else {
+                                println!("irc: USERS: You aren't connected to any channels.")
                             }
                         },
                         "/next" => {
@@ -227,7 +271,9 @@ fn main() {
                                 let channel_number = (channels_lock.1).0;
 
                                 channels_lock.0.remove(channel_number);
-                                (channels_lock.1).0 = channel_number - 1;
+                                if channel_number != 0 {
+                                    (channels_lock.1).0 = channel_number - 1;
+                                }
                             } else {
                                 println!("irc: LEAVE: You aren't connected to any channels.")
                             }
@@ -340,11 +386,40 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Joined {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;    
+                            channel.push_user(source);       
                         } else {
                             println!("\x1B[1m{} joined [{}]\x1B[21m", source, message);
                         }
                     },
+                    "353" => { // channel users list
+                        let mut channels_lock = channels.lock().unwrap();
+
+                        let mut parts: Vec<String> = args.map(|x| { x.to_string() }).collect();
+                        parts.reverse(); // there is a better way for this surely
+                        parts.pop(); parts.pop();
+                        let chan = parts.pop().unwrap();
+                        parts.reverse();
+                        parts.pop();
+                        if parts[0].starts_with(':') {
+                           //let clone = parts[0].clone().to_string();
+                            //clone.remove(0);
+                            parts[0].remove(0);
+                        }
+
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|channel| {
+                            channel.get_name() == chan
+                        }).next();
+
+                        let channel = channel.unwrap(); 
+
+                        let users = parts;
+                        for user in &users {
+                            channel.push_user(user);
+                        }
+                        println!("{} {:?}", chan, users);
+                    }
                     "MODE" => {
                         let target = args.next().unwrap_or("");
                         let mode = args.next().unwrap_or("");
@@ -399,7 +474,8 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Parted {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;   
+                            channel.remove_user(source);          
                         } else {
                             println!("\x1B[1m{} parted {} ({})\x1B[21m", source, _target, message);
                         }
@@ -440,12 +516,21 @@ fn main() {
                         }
                     },
                     "QUIT" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
+
+                        for channel in &mut channels_lock.0 {
+                            if channel.has_user(source) {
+                                channel.buffer.push(Message::Quit { user: source.to_string(), message: message.clone()});
+                                channel.remove_user(source);
+                            }
+                        }
+                        //println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
                     },
                     "372" => {
                         let _target = args.next().unwrap_or("");
