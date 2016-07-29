@@ -38,15 +38,21 @@ impl Socket {
 #[derive(Clone)]
 pub struct Channel {
     pub name: String,
-    pub buffer: String,
+    pub buffer: Vec<Message>,
     pub unread: u32,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Chat { user: String, content: String },
+    Info { content: String },
 }
 
 impl Channel {
     fn new(name: String) -> Self {
         Channel {
             name: name,
-            buffer: String::new(),
+            buffer: vec![],
             unread: 0,
         }
     }
@@ -55,13 +61,19 @@ impl Channel {
         self.name.clone()
     }
 
-    fn push(&mut self, arg: &str) {
+    /*fn push(&mut self, arg: &str) {
         self.buffer.push_str(arg);
-    }
+    }*/
 
+    // Format the buffer into text, print it, clear the buffer, reset unread counter.
     fn dump_buf(&mut self) {
-        print!("{}", self.buffer);
-        self.buffer = String::new();
+        for message in self.buffer.clone() {
+            match message {
+                Message::Chat{user, content} => println!("\x1B[7m{}: {}\x1B[27m", user, content),
+                _ => {},
+            }
+        }
+        self.buffer = vec![];
         self.unread = 0;
     }
 }
@@ -153,6 +165,9 @@ fn main() {
                                         // channel ID
                                         channels_lock.1 %= Wrapping(channels_lock.0.len());       
                                         println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+
+                                        let channel_number = (channels_lock.1).0;
+                                        channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
                                     }   
                                 }
                             } else {
@@ -298,7 +313,8 @@ fn main() {
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
-                            channel.buffer.push_str(&format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message));
+                            channel.buffer.push(Message::Chat {user: source.to_string(), content: message});
+                            //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;             
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
