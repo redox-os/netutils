@@ -1,3 +1,7 @@
+extern crate termion;
+
+use termion::{color, style};
+
 use std::env;
 use std::io::{stdin, Read, Write, Result};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -32,6 +36,15 @@ impl Socket {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Message {
+    Chat { user: String, message: String },
+    Info { message: String },
+    Joined { user: String, message: String },
+    Parted { user: String, message: String },
+    Quit { user: String, message: String },
+}
+
 /// Channel struct used to store currently open channels,
 /// and a buffer of messages received when the channel
 /// wasn't focused on
@@ -40,14 +53,9 @@ pub struct Channel {
     pub name: String,
     pub buffer: Vec<Message>,
     pub unread: u32,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Chat { user: String, message: String },
-    Info { message: String },
-    Joined { user: String, message: String },
-    Parted { user: String, message: String }
+    pub users: Vec<String>,
+    /// Has the nickname been mentioned since last look at the channel?
+    pub mentioned: bool,
 }
 
 impl Channel {
@@ -56,6 +64,8 @@ impl Channel {
             name: name,
             buffer: vec![],
             unread: 0,
+            users: vec![],
+            mentioned: false,
         }
     }
 
@@ -71,10 +81,11 @@ impl Channel {
     fn dump_buf(&mut self) {
         for message in self.buffer.clone() {
             match message {
-                Message::Chat{user, message} => println!("\x1B[7m{}: {}\x1B[27m", user, message),
+                Message::Chat{user, message} => println!("{}{}{}: {}{}", style::Bold, color::Fg(color::Green), user, message, style::Reset),
                 Message::Info{message} => println!("info: {}", message),
                 Message::Joined{user, message} => {
-                    print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
+                    //print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
+                    print!("{}{} joined {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
                         print!("\n");
                     } else {
@@ -82,17 +93,50 @@ impl Channel {
                     }
                 },
                 Message::Parted{user, message} => {
-                    print!("\x1B[1m{} parted {}\x1B[21m", user, self.get_name());
+                    print!("{}{} parted {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
                         print!("\n");
                     } else {
                         println!(" ({})", message);
                     }
                 },
+                Message::Quit{user, message} => {
+                    print!("{}{} Quit ({}){}\n", color::Fg(color::Blue), user, message, style::Reset);
+                },
             }
         }
         self.buffer = vec![];
         self.unread = 0;
+        self.mentioned = false;
+    }
+
+    fn users(&self) -> String {
+        let mut buffer = "".to_string();
+        for user in &self.users {
+            buffer.push_str(&format!("{}, ", user));
+        }
+
+        buffer
+    }
+
+    fn has_user(&self, username: &str) -> bool {
+        self.users.clone().into_iter().find(|list_user| {list_user == username}).is_some()
+    }
+
+    /// Pushes a new user to the channel users list, unless that user is already on the list.
+    fn push_user(&mut self, username: &str) {
+        let on_list = self.users.clone().into_iter().find(|list_user| {list_user == username}).is_some();
+        if !on_list {
+            self.users.push(username.to_string());
+        }
+    }
+
+    /// Removes the user from the users list, do nothing if the user isn't on the list.
+    fn remove_user(&mut self, username: &str) {
+        let on_list = self.users.clone().into_iter().position(|list_user| {list_user == username});
+        if on_list.is_some() {
+            self.users.remove(on_list.unwrap());
+        }
     }
 }
 
@@ -148,6 +192,17 @@ fn main() {
                                 println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
                             }
                         },
+                        "/users" => {
+                            let mut channels_lock = channels.lock().unwrap();
+
+                            if channels_lock.0.get((channels_lock.1).0).is_some() {
+                                let chan = channels_lock.0.get((channels_lock.1).0).unwrap().get_name();
+                                socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
+                                println!("irc: Users in this channel: \n{}", channels_lock.0.get((channels_lock.1).0).unwrap().users());
+                            } else {
+                                println!("irc: USERS: You aren't connected to any channels.")
+                            }
+                        },
                         "/next" => {
                             let mut channels_lock = channels.lock().unwrap();
 
@@ -197,9 +252,13 @@ fn main() {
                             println!("irc: Currently connected to:");
                             for (i, channel) in channels_lock.0.iter().enumerate() {
                                 if i == (channels_lock.1).0 {
-                                    println!("{}. > {}", i + 1, channel.get_name());
-                                } else { 
-                                    println!("{}.   {}, {} unread", i + 1, channel.get_name(), channel.unread);
+                                    println!("{}{}. > {}{}", color::Fg(color::Green), i + 1, channel.get_name(), style::Reset);
+                                } else if channel.mentioned == true {
+                                    println!("{}{}.     {}, {} unread, you were mentioned{}", color::Fg(color::Red), i + 1, channel.get_name(), channel.unread, style::Reset);
+                                } else if channel.unread > 0 { 
+                                    println!("{}.     {}, {}{}{} unread{}", i + 1, channel.get_name(), color::Fg(color::Yellow), style::Bold, channel.unread, style::Reset);
+                                } else {
+                                    println!("{}.     {}, {} unread", i + 1, channel.get_name(), channel.unread);
                                 }
                             }
                         },
@@ -214,7 +273,9 @@ fn main() {
                                 let channel_number = (channels_lock.1).0;
 
                                 channels_lock.0.remove(channel_number);
-                                (channels_lock.1).0 = channel_number - 1;
+                                if channel_number != 0 {
+                                    (channels_lock.1).0 = channel_number - 1;
+                                }
                             } else {
                                 println!("irc: LEAVE: You aren't connected to any channels.")
                             }
@@ -327,11 +388,40 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Joined {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;    
+                            channel.push_user(source);       
                         } else {
                             println!("\x1B[1m{} joined [{}]\x1B[21m", source, message);
                         }
                     },
+                    "353" => { // channel users list
+                        let mut channels_lock = channels.lock().unwrap();
+
+                        let mut parts: Vec<String> = args.map(|x| { x.to_string() }).collect();
+                        parts.reverse(); // there is a better way for this surely
+                        parts.pop(); parts.pop();
+                        let chan = parts.pop().unwrap();
+                        parts.reverse();
+                        parts.pop();
+                        if parts[0].starts_with(':') {
+                           //let clone = parts[0].clone().to_string();
+                            //clone.remove(0);
+                            parts[0].remove(0);
+                        }
+
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|channel| {
+                            channel.get_name() == chan
+                        }).next();
+
+                        let channel = channel.unwrap(); 
+
+                        let users = parts;
+                        channel.users = vec![];
+                        for user in &users {
+                            channel.push_user(user);
+                        }
+                    }
                     "MODE" => {
                         let target = args.next().unwrap_or("");
                         let mode = args.next().unwrap_or("");
@@ -386,7 +476,8 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Parted {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;   
+                            channel.remove_user(source);          
                         } else {
                             println!("\x1B[1m{} parted {} ({})\x1B[21m", source, _target, message);
                         }
@@ -411,22 +502,37 @@ fn main() {
                         }
 
                         if channel.is_some(){
+
+                            let message = message.clone();
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
-                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
+                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message.clone()});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;  
+
+                            if message.contains(&nick) {
+                                channel.mentioned = true;
+                            }           
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                         }
                     },
                     "QUIT" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
+
+                        for channel in &mut channels_lock.0 {
+                            if channel.has_user(source) {
+                                channel.buffer.push(Message::Quit { user: source.to_string(), message: message.clone()});
+                                channel.remove_user(source);
+                            }
+                        }
+                        //println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
                     },
                     "372" => {
                         let _target = args.next().unwrap_or("");
