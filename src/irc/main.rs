@@ -44,8 +44,10 @@ pub struct Channel {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Chat { user: String, content: String },
-    Info { content: String },
+    Chat { user: String, message: String },
+    Info { message: String },
+    Joined { user: String, message: String },
+    Parted { user: String, message: String }
 }
 
 impl Channel {
@@ -65,12 +67,28 @@ impl Channel {
         self.buffer.push_str(arg);
     }*/
 
-    // Format the buffer into text, print it, clear the buffer, reset unread counter.
+    /// Format the buffer into text, print it, clear the buffer, reset unread counter.
     fn dump_buf(&mut self) {
         for message in self.buffer.clone() {
             match message {
-                Message::Chat{user, content} => println!("\x1B[7m{}: {}\x1B[27m", user, content),
-                _ => {},
+                Message::Chat{user, message} => println!("\x1B[7m{}: {}\x1B[27m", user, message),
+                Message::Info{message} => println!("info: {}", message),
+                Message::Joined{user, message} => {
+                    print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
+                    if message == "".to_string() {
+                        print!("\n");
+                    } else {
+                        println!(" ({})", message);
+                    }
+                },
+                Message::Parted{user, message} => {
+                    print!("\x1B[1m{} parted {}\x1B[21m", user, self.get_name());
+                    if message == "".to_string() {
+                        print!("\n");
+                    } else {
+                        println!(" ({})", message);
+                    }
+                },
             }
         }
         self.buffer = vec![];
@@ -173,7 +191,7 @@ fn main() {
                             } else {
                                 println!("irc: GOTO: You must provide the channel's number. You can find it by using /list");
                             }
-                        }
+                        },
                         "/list" => {
                             let mut channels_lock = channels.lock().unwrap();
                             println!("irc: Currently connected to:");
@@ -262,12 +280,31 @@ fn main() {
                         println!("\x1B[1mERROR: {}\x1B[21m", message);
                     },
                     "JOIN" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1m{} joined {}\x1B[21m", source, message);
+                        let message_split: Vec<&str> = message.split(":").collect();
+                        let _target = message_split[0].to_string();
+                        let message = message_split.get(1).unwrap_or(&"").to_string();
+
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|chan| {
+                            chan.get_name() == _target
+                        }).next(); 
+
+                        if channel.is_some(){
+                            let mut channel = channel.unwrap();
+                            //println!("Message hidden"); // this for testing
+                            channel.buffer.push(Message::Joined {user: source.to_string(), message: message});
+                            //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
+                            channel.unread += 1;             
+                        } else {
+                            println!("\x1B[1m{} joined [{}]\x1B[21m", source, message);
+                        }
                     },
                     "MODE" => {
                         let target = args.next().unwrap_or("");
@@ -275,21 +312,58 @@ fn main() {
                         println!("\x1B[1m{} set to mode {}\x1B[21m", target, mode);
                     },
                     "NOTICE" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let _target = args.next().unwrap_or("");
+
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|chan| {
+                            chan.get_name() == _target
+                        }).next(); 
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[7m\x1B[1m{}: {}\x1B[21m\x1B[27m", source, message);
+
+                        if channel.is_some(){
+                            let mut channel = channel.unwrap();
+                            //println!("Message hidden"); // this for testing
+                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
+                            //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
+                            channel.unread += 1;             
+                        } else {
+                            println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
+                        }
                     },
                     "PART" => {
+                        let mut channels_lock = channels.lock().unwrap();
+
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1m{} parted {}\x1B[21m", source, message);
+                        let message_split: Vec<&str> = message.split(":").collect();
+                        let _target = message_split[0].to_string();
+                        let _target = _target.trim();
+                        let message = message_split.get(1).unwrap_or(&"").to_string();
+                        
+                        let channel: Option<&mut Channel>;
+                        channel = channels_lock.0.iter_mut().filter(|chan| {
+                            chan.get_name() == _target
+                        }).next(); 
+
+                        if channel.is_some(){
+                            let mut channel = channel.unwrap();
+                            //println!("Message hidden"); // this for testing
+                            channel.buffer.push(Message::Parted {user: source.to_string(), message: message});
+                            //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
+                            channel.unread += 1;             
+                        } else {
+                            println!("\x1B[1m{} parted {} ({})\x1B[21m", source, _target, message);
+                        }
                     },
                     "PING" => {
                         socket_read.send(format!("PONG {}\r\n", nick).as_bytes()).unwrap();
@@ -313,7 +387,7 @@ fn main() {
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
-                            channel.buffer.push(Message::Chat {user: source.to_string(), content: message});
+                            channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;             
                         } else {
