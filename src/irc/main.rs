@@ -84,8 +84,8 @@ impl Channel {
     fn dump_buf(&mut self) {
         for message in self.buffer.clone() {
             match message {
-                Message::Chat{user, message} => println!("{}{}{}: {}{}", style::Bold, color::Fg(color::Green), user, message, style::Reset),
-                Message::Info{message} => println!("info: {}", message),
+                Message::Chat{user, message} => println!("{}{}{}: {}{}\r", style::Bold, color::Fg(color::Green), user, message, style::Reset),
+                Message::Info{message} => println!("info: {}\r", message),
                 Message::Joined{user, message} => {
                     //print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
                     print!("{}{} joined {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
@@ -170,17 +170,23 @@ fn main() {
             for ch in stdin().keys() {
                 match ch.unwrap() {
                     Key::Char('\n') => {
-                        println!("\r");
+                        println!("{}{}> {}{}", color::Fg(color::Magenta), style::Bold, line_original, style::Reset);
                         break;
                     },
                     Key::Char(c) => {
                         line_original.push(c);
-                        print!("{}", c);
+                        //print!("{}", c);
                     },
+                    Key::Backspace => {
+                        line_original.pop();
+                    }
                     Key::Null => break 'stdin, // it's the end, stop.
                     _ => {}
                 }
-                print!("")
+                print!("{}{}> {}", termion::cursor::Goto(1,1), termion::clear::CurrentLine, line_original);
+                let (width, height) = termion::terminal_size().unwrap();
+                print!("{}", termion::cursor::Goto(1, height));
+                stdout.flush().unwrap();
             }
             println!("\r");
 
