@@ -2,6 +2,8 @@ extern crate termion;
 
 use termion::{color, style};
 use termion::raw::IntoRawMode;
+use termion::event::Key;
+use termion::input::TermRead;
 
 use std::env;
 use std::io::{stdin, stdout, Read, Write, Result};
@@ -164,12 +166,23 @@ fn main() {
     thread::spawn(move || {
         let channels = channels_thread;
         'stdin: loop {
-
             let mut line_original = String::new();
-            if stdin().read_line(&mut line_original).unwrap() == 0 {
-                println!("END OF INPUT\r");
-                break 'stdin;
+            for ch in stdin().keys() {
+                match ch.unwrap() {
+                    Key::Char('\n') => {
+                        println!("\r");
+                        break;
+                    },
+                    Key::Char(c) => {
+                        line_original.push(c);
+                        print!("{}", c);
+                    },
+                    Key::Null => break 'stdin, // it's the end, stop.
+                    _ => {}
+                }
+                print!("")
             }
+            println!("\r");
 
             let line = line_original.trim();
             if line.starts_with('/') {
