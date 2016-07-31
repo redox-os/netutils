@@ -1,9 +1,10 @@
 extern crate termion;
 
 use termion::{color, style};
+use termion::raw::IntoRawMode;
 
 use std::env;
-use std::io::{stdin, Read, Write, Result};
+use std::io::{stdin, stdout, Read, Write, Result};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::str;
 use std::sync::{Arc, Mutex};
@@ -87,21 +88,21 @@ impl Channel {
                     //print!("\x1B[1m{} joined {}\x1B[21m", user, self.get_name());
                     print!("{}{} joined {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
-                        print!("\n");
+                        print!("\r\n");
                     } else {
-                        println!(" ({})", message);
+                        println!(" ({})\r",  message);
                     }
                 },
                 Message::Parted{user, message} => {
                     print!("{}{} parted {}{}", color::Fg(color::Blue), user, self.get_name(), style::Reset);
                     if message == "".to_string() {
-                        print!("\n");
+                        print!("\r\n");
                     } else {
-                        println!(" ({})", message);
+                        println!(" ({})\r",  message);
                     }
                 },
                 Message::Quit{user, message} => {
-                    print!("{}{} Quit ({}){}\n", color::Fg(color::Blue), user, message, style::Reset);
+                    print!("{}{} Quit ({}){}\r\n", color::Fg(color::Blue), user, message, style::Reset);
                 },
             }
         }
@@ -144,6 +145,8 @@ impl Channel {
 fn main() {
     use std::num::Wrapping;
 
+    let mut stdout = stdout().into_raw_mode().unwrap();
+
     let mut args = env::args().skip(1);
 
     let nick = args.next().expect("No nickname provided");
@@ -164,7 +167,7 @@ fn main() {
 
             let mut line_original = String::new();
             if stdin().read_line(&mut line_original).unwrap() == 0 {
-                println!("END OF INPUT");
+                println!("END OF INPUT\r");
                 break 'stdin;
             }
 
@@ -178,7 +181,7 @@ fn main() {
                             let message = parts.join(" ");
                             socket_write.send(format!("PRIVMSG {} :{}\r\n", target, message).as_bytes()).unwrap();
                         } else {
-                            println!("irc: MSG: No message target given, use /msg target_user message.");
+                            println!("irc: MSG: No message target given, use /msg target_user message.\r");
                         },
                         "/join" | "/j" => {
                             if let Some(chan) = args.next() {
@@ -189,7 +192,7 @@ fn main() {
                                 channels_lock.1 = Wrapping(channels_lock.0.len() - 1);
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
                             } else {
-                                println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.");
+                                println!("irc: JOIN: You must provide a channel to join, use /join #chan_name.\r");
                             }
                         },
                         "/users" => {
@@ -198,7 +201,7 @@ fn main() {
                             if channels_lock.0.get((channels_lock.1).0).is_some() {
                                 let chan = channels_lock.0.get((channels_lock.1).0).unwrap().get_name();
                                 socket_write.send(format!("JOIN {}\r\n", chan).as_bytes()).unwrap();
-                                println!("irc: Users in this channel: \n{}", channels_lock.0.get((channels_lock.1).0).unwrap().users());
+                                println!("irc: Users in this channel: \n{}\r",  channels_lock.0.get((channels_lock.1).0).unwrap().users());
                             } else {
                                 println!("irc: USERS: You aren't connected to any channels.")
                             }
@@ -208,7 +211,7 @@ fn main() {
 
                             channels_lock.1 += Wrapping(1);
                             channels_lock.1 %= Wrapping(channels_lock.0.len());
-                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                            println!("irc: Talking on {}\r",  channels_lock.0.get((channels_lock.1).0).unwrap().name);
                             let channel_number = (channels_lock.1).0;
                             channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
                         },
@@ -217,7 +220,7 @@ fn main() {
 
                             channels_lock.1 -= Wrapping(1);
                             channels_lock.1 %= Wrapping(channels_lock.0.len());       
-                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);  
+                            println!("irc: Talking on {}\r",  channels_lock.0.get((channels_lock.1).0).unwrap().name);  
                             let channel_number = (channels_lock.1).0;     
                             channels_lock.0.get_mut(channel_number).unwrap().dump_buf();             
                         },
@@ -227,38 +230,38 @@ fn main() {
                             if let Some(n) = args.next() {
                                 let n = n.parse::<usize>();
                                 if n.is_err() {
-                                    println!("irc: GOTO: You must provide the channel's number. You can find the number by using /list");
+                                    println!("irc: GOTO: You must provide the channel's number. You can find the number by using /list\r");
                                 } else {
                                     let n = n.unwrap();
                                     if n < 1 || n > channels_lock.0.len() {
-                                        println!("irc: GOTO: This channel number is invalid. You can find the number by using /list");
+                                        println!("irc: GOTO: This channel number is invalid. You can find the number by using /list\r");
                                     } else {
                                         channels_lock.1 = Wrapping(n - 1);
                                         // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
                                         // channel ID
                                         channels_lock.1 %= Wrapping(channels_lock.0.len());       
-                                        println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                                        println!("irc: Talking on {}\r",  channels_lock.0.get((channels_lock.1).0).unwrap().name);
 
                                         let channel_number = (channels_lock.1).0;
                                         channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
                                     }   
                                 }
                             } else {
-                                println!("irc: GOTO: You must provide the channel's number. You can find it by using /list");
+                                println!("irc: GOTO: You must provide the channel's number. You can find it by using /list\r");
                             }
                         },
                         "/list" => {
                             let mut channels_lock = channels.lock().unwrap();
-                            println!("irc: Currently connected to:");
+                            println!("irc: Currently connected to:\r");
                             for (i, channel) in channels_lock.0.iter().enumerate() {
                                 if i == (channels_lock.1).0 {
-                                    println!("{}{}. > {}{}", color::Fg(color::Green), i + 1, channel.get_name(), style::Reset);
+                                    println!("{}{}. > {}{}\r",  color::Fg(color::Green), i + 1, channel.get_name(), style::Reset);
                                 } else if channel.mentioned == true {
-                                    println!("{}{}.     {}, {} unread, you were mentioned{}", color::Fg(color::Red), i + 1, channel.get_name(), channel.unread, style::Reset);
+                                    println!("{}{}.     {}, {} unread, you were mentioned{}\r",  color::Fg(color::Red), i + 1, channel.get_name(), channel.unread, style::Reset);
                                 } else if channel.unread > 0 { 
-                                    println!("{}.     {}, {}{}{} unread{}", i + 1, channel.get_name(), color::Fg(color::Yellow), style::Bold, channel.unread, style::Reset);
+                                    println!("{}.     {}, {}{}{} unread{}\r",  i + 1, channel.get_name(), color::Fg(color::Yellow), style::Bold, channel.unread, style::Reset);
                                 } else {
-                                    println!("{}.     {}, {} unread", i + 1, channel.get_name(), channel.unread);
+                                    println!("{}.     {}, {} unread\r",  i + 1, channel.get_name(), channel.unread);
                                 }
                             }
                         },
@@ -281,16 +284,16 @@ fn main() {
                             }
                         },
                         "/help" | "/commands" => {
-                            println!("irc: Available commands:");
-                            println!("     /join <channel_name> - Joins a channel");
-                            println!("     /list - Lists channels you're connected to");
-                            println!("     /next - Goes to the next channel");
-                            println!("     /back - Goes to the earlier channel");
-                            println!("     /goto <channel_number> - Goes to a specified channel");
-                            println!("     /msg <user> <message> - Sends a private message");
-                            println!("     /leave or /part - Leaves a channel");
-                            println!("     /quit or /exit - Exits this program");
-                            println!("     /help or /commands - Shows this help message");
+                            println!("irc: Available commands:\r");
+                            println!("     /join <channel_name> - Joins a channel\r");
+                            println!("     /list - Lists channels you're connected to\r");
+                            println!("     /next - Goes to the next channel\r");
+                            println!("     /back - Goes to the earlier channel\r");
+                            println!("     /goto <channel_number> - Goes to a specified channel\r");
+                            println!("     /msg <user> <message> - Sends a private message\r");
+                            println!("     /leave or /part - Leaves a channel\r");
+                            println!("     /quit or /exit - Exits this program\r");
+                            println!("     /help or /commands - Shows this help message\r");
                         }
                         "/quit" | "/exit" => break 'stdin,
                         // Next one also matches short form of goto, /<chan_number>
@@ -306,13 +309,13 @@ fn main() {
                             } else {
                                 let n = n.unwrap();
                                 if n < 1 || n > channels_lock.0.len() {
-                                    println!("irc: GOTO: This channel number is invalid. You can find the number by using /list");
+                                    println!("irc: GOTO: This channel number is invalid. You can find the number by using /list\r");
                                 } else {
                                     channels_lock.1 = Wrapping(n - 1);
                                     // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
                                     // channel ID
                                     channels_lock.1 %= Wrapping(channels_lock.0.len());       
-                                    println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                                    println!("irc: Talking on {}\r",  channels_lock.0.get((channels_lock.1).0).unwrap().name);
 
                                     let channel_number = (channels_lock.1).0;
                                     channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
@@ -327,7 +330,7 @@ fn main() {
                 if let Some(ref chan) = channels_lock.0.get((channels_lock.1).0) {
                     socket_write.send(format!("PRIVMSG {} :{}\r\n", chan.name, line).as_bytes()).unwrap();
                 } else {
-                    println!("irc: You haven't joined a channel yet, use /join #chan_name");
+                    println!("irc: You haven't joined a channel yet, use /join #chan_name\r");
                 }
             }
         }
@@ -340,7 +343,7 @@ fn main() {
         let count = socket_read.receive(&mut buffer).unwrap();
 
         if count == 0 {
-            println!("CONNECTION CLOSED");
+            println!("CONNECTION CLOSED\r");
             break 'stdout;
         }
 
@@ -363,7 +366,7 @@ fn main() {
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1mERROR: {}\x1B[21m", message);
+                        println!("\x1B[1mERROR: {}\x1B[21m\r",  message);
                     },
                     "JOIN" => {
                         let mut channels_lock = channels.lock().unwrap();
@@ -385,13 +388,13 @@ fn main() {
 
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
-                            //println!("Message hidden"); // this for testing
+                            //println!("Message hidden\r"); // this for testing
                             channel.buffer.push(Message::Joined {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;    
                             channel.push_user(source);       
                         } else {
-                            println!("\x1B[1m{} joined [{}]\x1B[21m", source, message);
+                            println!("\x1B[1m{} joined [{}]\x1B[21m\r",  source, message);
                         }
                     },
                     "353" => { // channel users list
@@ -425,7 +428,7 @@ fn main() {
                     "MODE" => {
                         let target = args.next().unwrap_or("");
                         let mode = args.next().unwrap_or("");
-                        println!("\x1B[1m{} set to mode {}\x1B[21m", target, mode);
+                        println!("\x1B[1m{} set to mode {}\x1B[21m\r",  target, mode);
                     },
                     "NOTICE" => {
                         let mut channels_lock = channels.lock().unwrap();
@@ -445,12 +448,12 @@ fn main() {
 
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
-                            //println!("Message hidden"); // this for testing
+                            //println!("Message hidden\r"); // this for testing
                             channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;             
                         } else {
-                            println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
+                            println!("\x1B[7m{} {}: {}\x1B[27m\r",  _target, source, message);
                         }
                     },
                     "PART" => {
@@ -473,13 +476,13 @@ fn main() {
 
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
-                            //println!("Message hidden"); // this for testing
+                            //println!("Message hidden\r"); // this for testing
                             channel.buffer.push(Message::Parted {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;   
                             channel.remove_user(source);          
                         } else {
-                            println!("\x1B[1m{} parted {} ({})\x1B[21m", source, _target, message);
+                            println!("\x1B[1m{} parted {} ({})\x1B[21m\r",  source, _target, message);
                         }
                     },
                     "PING" => {
@@ -505,7 +508,7 @@ fn main() {
 
                             let message = message.clone();
                             let mut channel = channel.unwrap();
-                            //println!("Message hidden"); // this for testing
+                            //println!("Message hidden\r"); // this for testing
                             channel.buffer.push(Message::Chat {user: source.to_string(), message: message.clone()});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
                             channel.unread += 1;  
@@ -514,7 +517,7 @@ fn main() {
                                 channel.mentioned = true;
                             }           
                         } else {
-                            println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
+                            println!("\x1B[7m{} {}: {}\x1B[27m\r",  _target, source, message);
                         }
                     },
                     "QUIT" => {
@@ -532,7 +535,7 @@ fn main() {
                                 channel.remove_user(source);
                             }
                         }
-                        //println!("\x1B[1m{} quit: {}\x1B[21m", source, message);
+                        //println!("\x1B[1m{} quit: {}\x1B[21m\r",  source, message);
                     },
                     "372" => {
                         let _target = args.next().unwrap_or("");
@@ -541,10 +544,10 @@ fn main() {
                         if message.starts_with(':') {
                             message.remove(0);
                         }
-                        println!("\x1B[1m{}\x1B[21m", message);
+                        println!("\x1B[1m{}\x1B[21m\r",  message);
                     },
                     _ => {
-                        println!("{}", line);
+                        println!("{}\r",  line);
                     }
                 }
             }
