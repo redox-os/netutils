@@ -1,4 +1,4 @@
-#![cfg_attr(not(target_os = "redox"), feature(lookup_host))]
+#![feature(lookup_host)]
 
 use std::{env, process};
 use std::io::{stderr, Write};
