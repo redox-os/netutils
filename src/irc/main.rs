@@ -188,7 +188,7 @@ fn main() {
                 print!("{}", termion::cursor::Goto(1, height));
                 stdout.flush().unwrap();
             }
-            println!("\r");
+            print!("\r");
 
             let line = line_original.trim();
             if line.starts_with('/') {
