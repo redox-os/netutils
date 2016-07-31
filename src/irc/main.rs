@@ -183,8 +183,9 @@ fn main() {
                     Key::Null => break 'stdin, // it's the end, stop.
                     _ => {}
                 }
-                print!("{}{}> {}", termion::cursor::Goto(1,1), termion::clear::CurrentLine, line_original);
                 let (width, height) = termion::terminal_size().unwrap();
+                print!("{}{}{}{}> {}{}", termion::cursor::Goto(1,1), termion::clear::CurrentLine, color::Fg(color::LightMagenta), 
+                                           color::Bg(color::White), line_original, style::Reset);
                 print!("{}", termion::cursor::Goto(1, height));
                 stdout.flush().unwrap();
             }
