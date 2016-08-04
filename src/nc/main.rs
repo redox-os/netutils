@@ -1,8 +1,8 @@
 use std::env;
-use std::io::{self, stdin, Read, Write, Result};
-use std::net::TcpStream;
-use std::str;
-use std::thread;
+use std::io::{self, Write};
+
+mod modes;
+use modes::*;
 
 static MAN_PAGE: &'static str = /* @MANSTART{tail} */ r#"
 NAME
@@ -27,35 +27,14 @@ AUTHOR
     Written by Sehny.
 "#; /* @MANEND */
 
-const BUFFER_SIZE: usize = 65636;
-
 enum TransportProtocol {
     Tcp,
     Udp,
 }
 
-// enum NcMode {
-//     Connect,
-//     Listen,
-// }
-
-fn connect_tcp(host: String) -> Result<()> {
-    let mut stream_read = TcpStream::connect(host.as_str()).unwrap();
-    let mut stream_write = stream_read.try_clone().unwrap();
-
-    thread::spawn(move || {
-        loop {
-            let mut buffer = [0u8; BUFFER_SIZE];
-            let count  = stream_read.read(&mut buffer).unwrap();
-            print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
-        }
-    });
-
-    loop {
-        let mut buffer = [0; BUFFER_SIZE];
-        let count = stdin().read(&mut buffer).unwrap();
-        let _ = stream_write.write(&buffer[..count]).unwrap();
-    }
+enum NcMode {
+    Connect,
+    Listen,
 }
 
 fn main() {
@@ -63,6 +42,7 @@ fn main() {
     let mut args = env::args().skip(1);
     let mut hostname = "".to_string();
     let mut proto = TransportProtocol::Tcp;
+    let mut mode = NcMode::Connect;
     let mut stdout = io::stdout();
 
     while let Some(arg) = args.next() {
@@ -74,8 +54,7 @@ fn main() {
                 }
                 "-u" | "--udp" => proto = TransportProtocol::Udp,
                 "-l" | "--listen" => {
-                    println!("This functionality has not been implemented yet.");
-                    return;
+                    mode = NcMode::Listen;
                 }
                 _ => {
                     println!("Invalid argument!");
@@ -87,9 +66,18 @@ fn main() {
         }
     }
 
-    println!("Remote host: {}", hostname);
-    match proto {
-        TransportProtocol::Tcp => connect_tcp(hostname).unwrap(),
-        TransportProtocol::Udp => println!("Not implemented. udp"),
+    match (mode, proto) {
+        (NcMode::Connect, TransportProtocol::Tcp) => {
+            connect_tcp(hostname).unwrap_or_else(|e| {
+                println!("nc error: {}", e);
+            });
+        }
+        (NcMode::Listen, TransportProtocol::Tcp) => {
+            listen_tcp(hostname).unwrap();
+        }
+        _ => {
+            println!("This functionality has not been implemented yet.");
+        }
     }
+
 }
