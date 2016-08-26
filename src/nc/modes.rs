@@ -4,6 +4,19 @@ use std::process::exit;
 use std::str;
 use std::thread;
 
+macro_rules! print_err {
+    ($($arg:tt)*) => (
+        {
+            use std::io::prelude::*;
+            if let Err(e) = write!(&mut ::std::io::stderr(), "{}\n", format_args!($($arg)*)) {
+                panic!("Failed to write to stderr.\
+                    \nOriginal error output: {}\
+                    \nSecondary error writing to stderr: {}", format!($($arg)*), e);
+            }
+        }
+    )
+}
+
 // TODO: variable buffer size? 
 const BUFFER_SIZE: usize = 65636;
 
@@ -15,12 +28,12 @@ fn rw_loop(mut stream_read: TcpStream, mut stream_write: TcpStream) -> Result<()
             // TODO: improve error messages
             let count  = match stream_read.read(&mut buffer) {
                 Ok(0) => {
-                    println!("End of input file.");
+                    print_err!("End of input file.");
                     exit(0);
                 }
                 Ok(c) => c,
                 Err(_) => {
-                    println!("Error occurred while reading from socket.");
+                    print_err!("Error occurred while reading from socket.");
                     exit(1);
                 }
             };
@@ -33,17 +46,17 @@ fn rw_loop(mut stream_read: TcpStream, mut stream_write: TcpStream) -> Result<()
         let mut buffer = [0; BUFFER_SIZE];
         let count = match stdin().read(&mut buffer) {
             Ok(0) => {
-                println!("End of input file.");
+                print_err!("End of input file.");
                 exit(0);
             }
             Ok(c) => c,
             Err(_) => {
-                println!("Error occured while reading from stdin.");
+                print_err!("Error occured while reading from stdin.");
                 exit(1);
             }
         };
         let _ = stream_write.write(&buffer[..count]).unwrap_or_else(|e| {
-            println!("Error occurred while writing into socket: {} ", e);
+            print_err!("Error occurred while writing into socket: {} ", e);
             exit(1);
         });
     }
@@ -57,7 +70,7 @@ pub fn connect_tcp(host: String) -> Result<(), String> {
     let stream_write = try!(stream_read.try_clone()
         .map_err(|e| {format!("connect_tcp error: can not create socket clone ({})", e)}));
 
-    println!("Remote host: {}", host);
+    print_err!("Remote host: {}", host);
 
     rw_loop(stream_read, stream_write)
 
@@ -72,7 +85,7 @@ pub fn listen_tcp(host: String) -> Result<(), String> {
         .map_err(|e| {format!("connect_tcp error: can not establish connection ({})", e)}));
     let stream_write = try!(stream_read.try_clone()
         .map_err(|e| {format!("connect_tcp error: can not create socket clone ({})", e)}));
-    println!("Incoming connection from: {}", socketaddr);
+    print_err!("Incoming connection from: {}", socketaddr);
     rw_loop(stream_read, stream_write)
 }
 
