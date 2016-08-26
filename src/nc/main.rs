@@ -22,7 +22,7 @@ OPTIONS
 
     -l
     --listen
-        Listen for incoming connections. Not implemented yet.
+        Listen for incoming connections.
 AUTHOR
     Written by Sehny.
 "#; /* @MANEND */
