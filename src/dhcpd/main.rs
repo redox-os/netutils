@@ -6,16 +6,23 @@ use dhcp::Dhcp;
 
 mod dhcp;
 
+fn getcfg(key: &str) -> String {
+    let mut value = String::new();
+    File::open(&format!("/etc/net/{}", key)).unwrap().read_to_string(&mut value).unwrap();
+    value.trim().to_string()
+}
+
+fn setcfg(key: &str, value: &str) {
+    File::create(&format!("/etc/net/{}", key)).unwrap().write_all(value.as_bytes()).unwrap();
+}
+
 fn dhcp(quiet: bool) {
-    let mut current_mac = [0; 6];
-    File::open("netcfg:mac").unwrap().read(&mut current_mac).unwrap();
+    let current_mac: Vec<u8> = getcfg("mac").split(".").map(|part| part.parse::<u8>().unwrap_or(0)).collect();
 
     {
-        let mut current_ip = [0; 4];
-        File::open("netcfg:ip").unwrap().read(&mut current_ip).unwrap();
-
         if ! quiet {
-            println!("DHCP: Current IP: {:?}", current_ip);
+            let current_ip = getcfg("ip");
+            println!("DHCP: Current IP: {}", current_ip);
         }
     }
 
@@ -132,46 +139,38 @@ fn dhcp(quiet: bool) {
         }
 
         {
-            File::open("netcfg:ip").unwrap().write(&offer.yiaddr).unwrap();
-
-            let mut new_ip = [0; 4];
-            File::open("netcfg:ip").unwrap().read(&mut new_ip).unwrap();
+            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3]));
 
             if ! quiet {
-                println!("DHCP: New IP: {:?}", new_ip);
+                let new_ip = getcfg("ip");
+                println!("DHCP: New IP: {}", new_ip);
             }
         }
 
         if let Some(subnet) = subnet_option {
-            File::open("netcfg:ip_subnet").unwrap().write(&subnet).unwrap();
-
-            let mut new_subnet = [0; 4];
-            File::open("netcfg:ip_subnet").unwrap().read(&mut new_subnet).unwrap();
+            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3]));
 
             if ! quiet {
-                println!("DHCP: New Subnet: {:?}", new_subnet);
+                let new_subnet = getcfg("ip_subnet");
+                println!("DHCP: New Subnet: {}", new_subnet);
             }
         }
 
         if let Some(router) = router_option {
-            File::open("netcfg:ip_router").unwrap().write(&router).unwrap();
-
-            let mut new_router = [0; 4];
-            File::open("netcfg:ip_router").unwrap().read(&mut new_router).unwrap();
+            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3]));
 
             if ! quiet {
-                println!("DHCP: New Router: {:?}", new_router);
+                let new_router = getcfg("ip_router");
+                println!("DHCP: New Router: {}", new_router);
             }
         }
 
         if let Some(dns) = dns_option {
-            File::open("netcfg:dns").unwrap().write(&dns).unwrap();
-
-            let mut new_dns = [0; 4];
-            File::open("netcfg:dns").unwrap().read(&mut new_dns).unwrap();
+            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3]));
 
             if ! quiet {
-                println!("DHCP: New DNS: {:?}", new_dns);
+                let new_dns = getcfg("dns");
+                println!("DHCP: New DNS: {}", new_dns);
             }
         }
     }
