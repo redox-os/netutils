@@ -1,3 +1,6 @@
+extern crate netutils;
+
+use netutils::{getcfg, setcfg};
 use std::{env, thread, time};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -6,22 +9,12 @@ use dhcp::Dhcp;
 
 mod dhcp;
 
-fn getcfg(key: &str) -> String {
-    let mut value = String::new();
-    File::open(&format!("/etc/net/{}", key)).unwrap().read_to_string(&mut value).unwrap();
-    value.trim().to_string()
-}
-
-fn setcfg(key: &str, value: &str) {
-    File::create(&format!("/etc/net/{}", key)).unwrap().write_all(value.as_bytes()).unwrap();
-}
-
 fn dhcp(quiet: bool) {
-    let current_mac: Vec<u8> = getcfg("mac").split(".").map(|part| part.parse::<u8>().unwrap_or(0)).collect();
+    let current_mac: Vec<u8> = getcfg("mac").unwrap().split(".").map(|part| part.parse::<u8>().unwrap_or(0)).collect();
 
     {
         if ! quiet {
-            let current_ip = getcfg("ip");
+            let current_ip = getcfg("ip").unwrap();
             println!("DHCP: Current IP: {}", current_ip);
         }
     }
@@ -139,37 +132,37 @@ fn dhcp(quiet: bool) {
         }
 
         {
-            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3]));
+            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])).unwrap();
 
             if ! quiet {
-                let new_ip = getcfg("ip");
+                let new_ip = getcfg("ip").unwrap();
                 println!("DHCP: New IP: {}", new_ip);
             }
         }
 
         if let Some(subnet) = subnet_option {
-            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3]));
+            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3])).unwrap();
 
             if ! quiet {
-                let new_subnet = getcfg("ip_subnet");
+                let new_subnet = getcfg("ip_subnet").unwrap();
                 println!("DHCP: New Subnet: {}", new_subnet);
             }
         }
 
         if let Some(router) = router_option {
-            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3]));
+            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3])).unwrap();
 
             if ! quiet {
-                let new_router = getcfg("ip_router");
+                let new_router = getcfg("ip_router").unwrap();
                 println!("DHCP: New Router: {}", new_router);
             }
         }
 
         if let Some(dns) = dns_option {
-            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3]));
+            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])).unwrap();
 
             if ! quiet {
-                let new_dns = getcfg("dns");
+                let new_dns = getcfg("dns").unwrap();
                 println!("DHCP: New DNS: {}", new_dns);
             }
         }
