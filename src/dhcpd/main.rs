@@ -10,18 +10,18 @@ use dhcp::Dhcp;
 mod dhcp;
 
 fn dhcp(quiet: bool) {
-    let current_mac: Vec<u8> = getcfg("mac").unwrap().split(".").map(|part| part.parse::<u8>().unwrap_or(0)).collect();
+    let current_mac: Vec<u8> = getcfg("mac").expect("dnsd: failed to get current mac").split(".").map(|part| part.parse::<u8>().unwrap_or(0)).collect();
 
     {
         if ! quiet {
-            let current_ip = getcfg("ip").unwrap();
+            let current_ip = getcfg("ip").unwrap_or("0.0.0.0".to_string());
             println!("DHCP: Current IP: {}", current_ip);
         }
     }
 
-    let tid = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().subsec_nanos();
+    let tid = time::SystemTime::now().duration_since(time::UNIX_EPOCH).expect("dnsd: failed to get time").subsec_nanos();
 
-    let mut socket = File::open("udp:255.255.255.255:67/68").unwrap();
+    let mut socket = File::open("udp:255.255.255.255:67/68").expect("dnsd: failed to open udp");
 
     {
         let mut discover = Dhcp {
@@ -50,7 +50,7 @@ fn dhcp(quiet: bool) {
 
         let discover_data = unsafe { std::slice::from_raw_parts((&discover as *const Dhcp) as *const u8, std::mem::size_of::<Dhcp>()) };
 
-        let _sent = socket.write(discover_data).unwrap();
+        let _sent = socket.write(discover_data).expect("dnsd: failed to send discover");
 
         if ! quiet {
             println!("DHCP: Sent Discover");
@@ -58,7 +58,7 @@ fn dhcp(quiet: bool) {
     }
 
     let mut offer_data = [0; 65536];
-    socket.read(&mut offer_data).unwrap();
+    socket.read(&mut offer_data).expect("dnsd: failed to receive offer");
     let offer = unsafe { &* (offer_data.as_ptr() as *const Dhcp) };
     if ! quiet {
         println!("DHCP: Offer IP: {:?}, Server IP: {:?}", offer.yiaddr, offer.siaddr);
@@ -132,37 +132,37 @@ fn dhcp(quiet: bool) {
         }
 
         {
-            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])).unwrap();
+            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])).expect("dnsd: failed to set ip");
 
             if ! quiet {
-                let new_ip = getcfg("ip").unwrap();
+                let new_ip = getcfg("ip").expect("dnsd: failed to get ip");
                 println!("DHCP: New IP: {}", new_ip);
             }
         }
 
         if let Some(subnet) = subnet_option {
-            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3])).unwrap();
+            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3])).expect("dnsd: failed to set ip subnet");
 
             if ! quiet {
-                let new_subnet = getcfg("ip_subnet").unwrap();
+                let new_subnet = getcfg("ip_subnet").expect("dnsd: failed to get ip subnet");
                 println!("DHCP: New Subnet: {}", new_subnet);
             }
         }
 
         if let Some(router) = router_option {
-            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3])).unwrap();
+            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3])).expect("dnsd: failed to set ip router");
 
             if ! quiet {
-                let new_router = getcfg("ip_router").unwrap();
+                let new_router = getcfg("ip_router").expect("dnsd: failed to get ip router");
                 println!("DHCP: New Router: {}", new_router);
             }
         }
 
         if let Some(dns) = dns_option {
-            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])).unwrap();
+            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])).expect("dnsd: failed to set dns");
 
             if ! quiet {
-                let new_dns = getcfg("dns").unwrap();
+                let new_dns = getcfg("dns").expect("dnsd: failed to get dns");
                 println!("DHCP: New DNS: {}", new_dns);
             }
         }
@@ -195,7 +195,7 @@ fn dhcp(quiet: bool) {
 
         let request_data = unsafe { std::slice::from_raw_parts((&request as *const Dhcp) as *const u8, std::mem::size_of::<Dhcp>()) };
 
-        let _sent = socket.write(request_data).unwrap();
+        let _sent = socket.write(request_data).expect("dnsd: failed to send request");
 
         if ! quiet {
             println!("DHCP: Sent Request");
@@ -204,7 +204,7 @@ fn dhcp(quiet: bool) {
 
     {
         let mut ack_data = [0; 65536];
-        socket.read(&mut ack_data).unwrap();
+        socket.read(&mut ack_data).expect("dnsd: failed to receive ack");
         let ack = unsafe { &* (ack_data.as_ptr() as *const Dhcp) };
         if ! quiet {
             println!("DHCP: Ack IP: {:?}, Server IP: {:?}", ack.yiaddr, ack.siaddr);
