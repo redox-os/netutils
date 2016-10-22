@@ -20,46 +20,46 @@ macro_rules! print_err {
 // TODO: variable buffer size?
 const BUFFER_SIZE: usize = 65636;
 
-fn rw_loop(mut stream_read: TcpStream, mut stream_write: TcpStream) -> Result<(), String> {
-    // Read loop
-    thread::spawn(move || {
-        loop {
-            let mut buffer = [0u8; BUFFER_SIZE];
-            // TODO: improve error messages
-            let count  = match stream_read.read(&mut buffer) {
-                Ok(0) => {
-                    print_err!("End of input file.");
-                    exit(0);
-                }
-                Ok(c) => c,
-                Err(_) => {
-                    print_err!("Error occurred while reading from socket.");
-                    exit(1);
-                }
-            };
-            print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
-        }
-    });
-
-    // Write loop
+/// Read from the input file into a buffer in an infinite loop.
+/// Handle the buffer content with handler function.
+fn rw_loop<R, F>(input: &mut R, mut handler: F) -> ! 
+    where R: Read, F: FnMut(&[u8], usize) -> ()
+{
     loop {
-        let mut buffer = [0; BUFFER_SIZE];
-        let count = match stdin().read(&mut buffer) {
+        let mut buffer = [0u8; BUFFER_SIZE];
+        // TODO: improve error messages
+        let count  = match input.read(&mut buffer) {
             Ok(0) => {
-                print_err!("End of input file.");
+                print_err!("End of input file/socket.");
                 exit(0);
             }
             Ok(c) => c,
             Err(_) => {
-                print_err!("Error occured while reading from stdin.");
+                print_err!("Error occurred while reading from file/socket.");
                 exit(1);
             }
         };
+        handler(&buffer, count);
+    }
+}
+
+/// Use the rw_loop in both direction (TCP connection)
+fn both_dir_rw_loop(mut stream_read: TcpStream, mut stream_write: TcpStream) -> Result<(), String> {
+    // Read loop
+    thread::spawn(move || {
+        rw_loop(&mut stream_read, |buffer, count| {
+            print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
+        });
+    });
+
+    // Write loop
+    let mut stdin = stdin();
+    rw_loop(&mut stdin, |buffer, count| {
         let _ = stream_write.write(&buffer[..count]).unwrap_or_else(|e| {
             print_err!("Error occurred while writing into socket: {} ", e);
             exit(1);
         });
-    }
+    });
 }
 
 /// Connect to listening TCP socket
@@ -72,7 +72,7 @@ pub fn connect_tcp(host: &str) -> Result<(), String> {
 
     print_err!("Remote host: {}", host);
 
-    rw_loop(stream_read, stream_write)
+    both_dir_rw_loop(stream_read, stream_write)
 
 }
 
@@ -86,7 +86,7 @@ pub fn listen_tcp(host: &str) -> Result<(), String> {
     let stream_write = try!(stream_read.try_clone()
                             .map_err(|e| {format!("connect_tcp error: can not create socket clone ({})", e)}));
     print_err!("Incoming connection from: {}", socketaddr);
-    rw_loop(stream_read, stream_write)
+    both_dir_rw_loop(stream_read, stream_write)
 }
 
 /// Send UDP datagrams to specified socket
@@ -96,25 +96,13 @@ pub fn connect_udp(host: &str) -> Result<(), String> {
     try!(socket.connect(host)
          .map_err(|e| {format!("connect_udp error: could not set up remote socket ({})", e)}));
 
-    loop {
-        let mut buffer = [0; BUFFER_SIZE];
-        let count = match stdin().read(&mut buffer) {
-            Ok(0) => {
-                print_err!("End of input file.");
-                exit(0);
-            }
-            Ok(c) => c,
-            Err(_) => {
-                print_err!("Error occured while reading from stdin.");
-                exit(1);
-            }
-        };
+    let mut stdin = stdin();
+    rw_loop(&mut stdin, |buffer, count| {
         let _ = socket.send(&buffer[..count]).unwrap_or_else(|e| {
             print_err!("Error occurred while writing into socket: {} ", e);
             exit(1);
         });
-    }
-
+    });
 }
 
 
