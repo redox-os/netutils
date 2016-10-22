@@ -82,8 +82,10 @@ fn main() {
                 println!("nc error: {}", e);
             });
         }
-        _ => {
-            println!("This functionality has not been implemented yet.");
+        (NcMode::Listen, TransportProtocol::Udp) => {
+            listen_udp(&hostname).unwrap_or_else(|e| {
+                println!("nc error: {}", e);
+            });
         }
     }
 

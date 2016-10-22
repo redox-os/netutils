@@ -91,6 +91,7 @@ pub fn listen_tcp(host: &str) -> Result<(), String> {
 
 /// Send UDP datagrams to specified socket
 pub fn connect_udp(host: &str) -> Result<(), String> {
+    // TODO: Implement some port selection process (while loop?)
     let socket = try!(UdpSocket::bind("localhost:30000")
                       .map_err(|e| {format!("connect_udp error: could not bind to local socket ({})", e)}));
     try!(socket.connect(host)
@@ -105,6 +106,26 @@ pub fn connect_udp(host: &str) -> Result<(), String> {
     });
 }
 
+/// Listen for UDP datagrams on the specified socket
+pub fn listen_udp(host: &str) -> Result<(), String> {
+    let socket = try!(UdpSocket::bind(host)
+                      .map_err(|e| {format!("connect_udp error: could not bind to local socket ({})", e)}));
+    loop {
+        let mut buffer = [0u8; BUFFER_SIZE];
+        let count  = match socket.recv_from(&mut buffer) {
+            Ok((0, _)) => {
+                print_err!("End of input file/socket.");
+                exit(0);
+            }
+            Ok((c, _)) => c,
+            Err(_) => {
+                print_err!("Error occurred while reading from file/socket.");
+                exit(1);
+            }
+        };
+        print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
+    }
+}
 
 //TODO: write some unit tests
 #[cfg(test)]
