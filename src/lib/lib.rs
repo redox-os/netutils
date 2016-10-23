@@ -141,6 +141,7 @@ pub struct EthernetIIHeader {
     pub ethertype: n16,
 }
 
+#[derive(Clone)]
 pub struct EthernetII {
     pub header: EthernetIIHeader,
     pub data: Vec<u8>,
