@@ -9,6 +9,7 @@ pub use mac::MacAddr;
 
 mod ip;
 mod mac;
+pub mod udp;
 
 pub fn getcfg(key: &str) -> Result<String> {
     let mut value = String::new();
@@ -302,49 +303,6 @@ impl Tcp {
             let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
                                                           mem::size_of::<TcpHeader>()));
             ret.extend_from_slice(&self.options);
-            ret.extend_from_slice(&self.data);
-            ret
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(packed)]
-pub struct UdpHeader {
-    pub src: n16,
-    pub dst: n16,
-    pub len: n16,
-    pub checksum: Checksum,
-}
-
-#[derive(Clone)]
-pub struct Udp {
-    pub header: UdpHeader,
-    pub data: Vec<u8>,
-}
-
-impl Udp {
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() >= mem::size_of::<UdpHeader>() {
-            unsafe {
-                let header = *(bytes.as_ptr() as *const UdpHeader);
-
-                if header.len.get() as usize <= bytes.len() && mem::size_of::<UdpHeader>() <= header.len.get() as usize {
-                    return Some(Udp {
-                        header: header,
-                        data: bytes[mem::size_of::<UdpHeader>()..header.len.get() as usize].to_vec(),
-                    });
-                }
-            }
-        }
-        None
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        unsafe {
-            let header_ptr: *const UdpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<UdpHeader>()));
             ret.extend_from_slice(&self.data);
             ret
         }
