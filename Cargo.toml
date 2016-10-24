@@ -16,6 +16,10 @@ name = "dns"
 path = "src/dns/main.rs"
 
 [[bin]]
+name = "httpd"
+path = "src/httpd/main.rs"
+
+[[bin]]
 name = "irc"
 path = "src/irc/main.rs"
 

@@ -5,6 +5,7 @@ pub struct Ipv4Addr {
 
 impl Ipv4Addr {
     pub const BROADCAST: Ipv4Addr = Ipv4Addr { bytes: [255, 255, 255, 255] };
+    pub const LOOPBACK: Ipv4Addr = Ipv4Addr { bytes: [127, 0, 0, 1] };
 
     pub fn equals(&self, other: Self) -> bool {
         for i in 0..4 {
