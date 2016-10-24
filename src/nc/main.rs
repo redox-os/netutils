@@ -8,7 +8,7 @@ static MAN_PAGE: &'static str = /* @MANSTART{tail} */ r#"
 NAME
     nc - Concatenate and redirect sockets
 SYNOPSIS
-    nc [[-h | --help] | [[-u | --udp]] [hostname:port]
+    nc [[-h | --help] | [-u | --udp] | [-l | --listen]] [hostname:port]
 DESCRIPTION
     Netcat (nc) is command line utility which can read and write data across network. Currently
     it only works with IPv4 and does not support any encryption.
@@ -18,7 +18,7 @@ OPTIONS
         Print this manual page.
     -u
     --udp
-        Use UDP instead of default TCP. Not implemented yet.
+        Use UDP instead of default TCP.
 
     -l
     --listen
@@ -68,15 +68,24 @@ fn main() {
 
     match (mode, proto) {
         (NcMode::Connect, TransportProtocol::Tcp) => {
-            connect_tcp(hostname).unwrap_or_else(|e| {
+            connect_tcp(&hostname).unwrap_or_else(|e| {
                 println!("nc error: {}", e);
             });
         }
         (NcMode::Listen, TransportProtocol::Tcp) => {
-            listen_tcp(hostname).unwrap();
+            listen_tcp(&hostname).unwrap_or_else(|e| {
+                println!("nc error: {}", e);
+            });
         }
-        _ => {
-            println!("This functionality has not been implemented yet.");
+        (NcMode::Connect, TransportProtocol::Udp) => {
+            connect_udp(&hostname).unwrap_or_else(|e| {
+                println!("nc error: {}", e);
+            });
+        }
+        (NcMode::Listen, TransportProtocol::Udp) => {
+            listen_udp(&hostname).unwrap_or_else(|e| {
+                println!("nc error: {}", e);
+            });
         }
     }
 
