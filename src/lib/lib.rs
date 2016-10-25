@@ -193,6 +193,14 @@ pub struct Ipv4 {
 }
 
 impl Ipv4 {
+    pub fn checksum(&mut self) {
+        self.header.checksum.data = 0;
+
+        self.header.checksum.data = Checksum::compile(unsafe {
+            Checksum::sum((&self.header as *const Ipv4Header) as usize, mem::size_of::<Ipv4Header>())
+        });
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() >= mem::size_of::<Ipv4Header>() {
             unsafe {
@@ -200,7 +208,7 @@ impl Ipv4 {
                 let header_len = ((header.ver_hlen & 0xF) << 2) as usize;
 
                 if header_len >= mem::size_of::<Ipv4Header>() && header_len <= bytes.len()
-                    && header.len.get() as usize <= bytes.len() - header_len && header_len <= header.len.get() as usize
+                    && header.len.get() as usize <= bytes.len() && header_len <= header.len.get() as usize
                 {
                     return Some(Ipv4 {
                         header: header,
@@ -312,18 +320,20 @@ pub struct Udp {
 }
 
 impl Udp {
-    //TODO: Check len
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() >= mem::size_of::<UdpHeader>() {
             unsafe {
-                Option::Some(Udp {
-                    header: *(bytes.as_ptr() as *const UdpHeader),
-                    data: bytes[mem::size_of::<UdpHeader>()..bytes.len()].to_vec(),
-                })
+                let header = *(bytes.as_ptr() as *const UdpHeader);
+
+                if header.len.get() as usize <= bytes.len() && mem::size_of::<UdpHeader>() <= header.len.get() as usize {
+                    return Some(Udp {
+                        header: header,
+                        data: bytes[mem::size_of::<UdpHeader>()..header.len.get() as usize].to_vec(),
+                    });
+                }
             }
-        } else {
-            Option::None
         }
+        None
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
