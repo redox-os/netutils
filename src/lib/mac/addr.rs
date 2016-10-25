@@ -1,19 +1,10 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MacAddr {
     pub bytes: [u8; 6],
 }
 
 impl MacAddr {
     pub const BROADCAST: MacAddr = MacAddr { bytes: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] };
-
-    pub fn equals(&self, other: Self) -> bool {
-        for i in 0..6 {
-            if self.bytes[i] != other.bytes[i] {
-                return false;
-            }
-        }
-        true
-    }
 
     pub fn from_str(string: &str) -> Self {
         let mut addr = MacAddr { bytes: [0, 0, 0, 0, 0, 0] };

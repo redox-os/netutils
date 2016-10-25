@@ -21,7 +21,7 @@ pub fn setcfg(key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
 #[repr(packed)]
 pub struct n16(u16);
@@ -40,7 +40,7 @@ impl n16 {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
 #[repr(packed)]
 pub struct n32(u32);
@@ -59,7 +59,7 @@ impl n32 {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Checksum {
     pub data: u16,
 }
@@ -90,7 +90,7 @@ impl Checksum {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct ArpHeader {
     pub htype: n16,
@@ -133,7 +133,7 @@ impl Arp {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct EthernetIIHeader {
     pub dst: MacAddr,
@@ -171,7 +171,7 @@ impl EthernetII {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct Ipv4Header {
     pub ver_hlen: u8,
@@ -199,11 +199,15 @@ impl Ipv4 {
                 let header = *(bytes.as_ptr() as *const Ipv4Header);
                 let header_len = ((header.ver_hlen & 0xF) << 2) as usize;
 
-                return Some(Ipv4 {
-                    header: header,
-                    options: bytes[mem::size_of::<Ipv4Header>() .. header_len].to_vec(),
-                    data: bytes[header_len .. header.len.get() as usize].to_vec(),
-                });
+                if header_len >= mem::size_of::<Ipv4Header>() && header_len <= bytes.len()
+                    && header.len.get() as usize <= bytes.len() - header_len && header_len <= header.len.get() as usize
+                {
+                    return Some(Ipv4 {
+                        header: header,
+                        options: bytes[mem::size_of::<Ipv4Header>() .. header_len].to_vec(),
+                        data: bytes[header_len .. header.len.get() as usize].to_vec(),
+                    });
+                }
             }
         }
         None
@@ -227,7 +231,7 @@ pub const TCP_RST: u16 = 1 << 2;
 pub const TCP_PSH: u16 = 1 << 3;
 pub const TCP_ACK: u16 = 1 << 4;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct TcpHeader {
     pub src: n16,
@@ -269,11 +273,13 @@ impl Tcp {
                 let header = *(bytes.as_ptr() as *const TcpHeader);
                 let header_len = ((header.flags.get() & 0xF000) >> 10) as usize;
 
-                return Some(Tcp {
-                    header: header,
-                    options: bytes[mem::size_of::<TcpHeader>()..header_len].to_vec(),
-                    data: bytes[header_len..bytes.len()].to_vec(),
-                });
+                if header_len >= mem::size_of::<TcpHeader>() && header_len <= bytes.len() {
+                    return Some(Tcp {
+                        header: header,
+                        options: bytes[mem::size_of::<TcpHeader>()..header_len].to_vec(),
+                        data: bytes[header_len..bytes.len()].to_vec(),
+                    });
+                }
             }
         }
         None
@@ -291,7 +297,7 @@ impl Tcp {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct UdpHeader {
     pub src: n16,

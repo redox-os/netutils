@@ -1,4 +1,4 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Ipv4Addr {
     pub bytes: [u8; 4],
 }
@@ -6,15 +6,6 @@ pub struct Ipv4Addr {
 impl Ipv4Addr {
     pub const BROADCAST: Ipv4Addr = Ipv4Addr { bytes: [255, 255, 255, 255] };
     pub const LOOPBACK: Ipv4Addr = Ipv4Addr { bytes: [127, 0, 0, 1] };
-
-    pub fn equals(&self, other: Self) -> bool {
-        for i in 0..4 {
-            if self.bytes[i] != other.bytes[i] {
-                return false;
-            }
-        }
-        true
-    }
 
     pub fn from_str(string: &str) -> Self {
         let mut addr = Ipv4Addr { bytes: [0, 0, 0, 0] };
