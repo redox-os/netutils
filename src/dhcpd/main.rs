@@ -1,27 +1,25 @@
+extern crate netutils;
+
+use netutils::{getcfg, setcfg, MacAddr};
 use std::{env, thread, time};
-use std::fs::File;
-use std::io::{Read, Write};
+use std::net::UdpSocket;
 
 use dhcp::Dhcp;
 
 mod dhcp;
 
 fn dhcp(quiet: bool) {
-    let mut current_mac = [0; 6];
-    File::open("netcfg:mac").unwrap().read(&mut current_mac).unwrap();
+    let current_mac = MacAddr::from_str(&getcfg("mac").expect("dhcpd: failed to get current mac"));
 
-    {
-        let mut current_ip = [0; 4];
-        File::open("netcfg:ip").unwrap().read(&mut current_ip).unwrap();
-
-        if ! quiet {
-            println!("DHCP: Current IP: {:?}", current_ip);
-        }
+    let current_ip = getcfg("ip").unwrap_or("0.0.0.0".to_string());
+    if ! quiet {
+        println!("DHCP: MAC: {} Current IP: {}", current_mac.to_string(), current_ip);
     }
 
-    let tid = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().subsec_nanos();
+    let tid = time::SystemTime::now().duration_since(time::UNIX_EPOCH).expect("dhcpd: failed to get time").subsec_nanos();
 
-    let mut socket = File::open("udp:255.255.255.255:67/68").unwrap();
+    let socket = UdpSocket::bind((current_ip.as_str(), 68)).expect("dhcpd: failed to bind udp");
+    socket.connect("255.255.255.255:67").expect("dhcpd: failed to connect udp");
 
     {
         let mut discover = Dhcp {
@@ -36,7 +34,7 @@ fn dhcp(quiet: bool) {
             yiaddr: [0, 0, 0, 0],
             siaddr: [0, 0, 0, 0],
             giaddr: [0, 0, 0, 0],
-            chaddr: [current_mac[0], current_mac[1], current_mac[2], current_mac[3], current_mac[4], current_mac[5],
+            chaddr: [current_mac.bytes[0], current_mac.bytes[1], current_mac.bytes[2], current_mac.bytes[3], current_mac.bytes[4], current_mac.bytes[5],
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
             sname: [0; 64],
             file: [0; 128],
@@ -50,7 +48,7 @@ fn dhcp(quiet: bool) {
 
         let discover_data = unsafe { std::slice::from_raw_parts((&discover as *const Dhcp) as *const u8, std::mem::size_of::<Dhcp>()) };
 
-        let _sent = socket.write(discover_data).unwrap();
+        let _sent = socket.send(discover_data).expect("dhcpd: failed to send discover");
 
         if ! quiet {
             println!("DHCP: Sent Discover");
@@ -58,7 +56,7 @@ fn dhcp(quiet: bool) {
     }
 
     let mut offer_data = [0; 65536];
-    socket.read(&mut offer_data).unwrap();
+    socket.recv(&mut offer_data).expect("dhcpd: failed to receive offer");
     let offer = unsafe { &* (offer_data.as_ptr() as *const Dhcp) };
     if ! quiet {
         println!("DHCP: Offer IP: {:?}, Server IP: {:?}", offer.yiaddr, offer.siaddr);
@@ -132,46 +130,38 @@ fn dhcp(quiet: bool) {
         }
 
         {
-            File::open("netcfg:ip").unwrap().write(&offer.yiaddr).unwrap();
-
-            let mut new_ip = [0; 4];
-            File::open("netcfg:ip").unwrap().read(&mut new_ip).unwrap();
+            setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])).expect("dhcpd: failed to set ip");
 
             if ! quiet {
-                println!("DHCP: New IP: {:?}", new_ip);
+                let new_ip = getcfg("ip").expect("dhcpd: failed to get ip");
+                println!("DHCP: New IP: {}", new_ip);
             }
         }
 
         if let Some(subnet) = subnet_option {
-            File::open("netcfg:ip_subnet").unwrap().write(&subnet).unwrap();
-
-            let mut new_subnet = [0; 4];
-            File::open("netcfg:ip_subnet").unwrap().read(&mut new_subnet).unwrap();
+            setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3])).expect("dhcpd: failed to set ip subnet");
 
             if ! quiet {
-                println!("DHCP: New Subnet: {:?}", new_subnet);
+                let new_subnet = getcfg("ip_subnet").expect("dhcpd: failed to get ip subnet");
+                println!("DHCP: New Subnet: {}", new_subnet);
             }
         }
 
         if let Some(router) = router_option {
-            File::open("netcfg:ip_router").unwrap().write(&router).unwrap();
-
-            let mut new_router = [0; 4];
-            File::open("netcfg:ip_router").unwrap().read(&mut new_router).unwrap();
+            setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3])).expect("dhcpd: failed to set ip router");
 
             if ! quiet {
-                println!("DHCP: New Router: {:?}", new_router);
+                let new_router = getcfg("ip_router").expect("dhcpd: failed to get ip router");
+                println!("DHCP: New Router: {}", new_router);
             }
         }
 
         if let Some(dns) = dns_option {
-            File::open("netcfg:dns").unwrap().write(&dns).unwrap();
-
-            let mut new_dns = [0; 4];
-            File::open("netcfg:dns").unwrap().read(&mut new_dns).unwrap();
+            setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])).expect("dhcpd: failed to set dns");
 
             if ! quiet {
-                println!("DHCP: New DNS: {:?}", new_dns);
+                let new_dns = getcfg("dns").expect("dhcpd: failed to get dns");
+                println!("DHCP: New DNS: {}", new_dns);
             }
         }
     }
@@ -189,7 +179,7 @@ fn dhcp(quiet: bool) {
             yiaddr: [0; 4],
             siaddr: offer.siaddr,
             giaddr: [0; 4],
-            chaddr: [current_mac[0], current_mac[1], current_mac[2], current_mac[3], current_mac[4], current_mac[5],
+            chaddr: [current_mac.bytes[0], current_mac.bytes[1], current_mac.bytes[2], current_mac.bytes[3], current_mac.bytes[4], current_mac.bytes[5],
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
             sname: [0; 64],
             file: [0; 128],
@@ -203,7 +193,7 @@ fn dhcp(quiet: bool) {
 
         let request_data = unsafe { std::slice::from_raw_parts((&request as *const Dhcp) as *const u8, std::mem::size_of::<Dhcp>()) };
 
-        let _sent = socket.write(request_data).unwrap();
+        let _sent = socket.send(request_data).expect("dhcpd: failed to send request");
 
         if ! quiet {
             println!("DHCP: Sent Request");
@@ -212,7 +202,7 @@ fn dhcp(quiet: bool) {
 
     {
         let mut ack_data = [0; 65536];
-        socket.read(&mut ack_data).unwrap();
+        socket.recv(&mut ack_data).expect("dhcpd: failed to receive ack");
         let ack = unsafe { &* (ack_data.as_ptr() as *const Dhcp) };
         if ! quiet {
             println!("DHCP: Ack IP: {:?}, Server IP: {:?}", ack.yiaddr, ack.siaddr);

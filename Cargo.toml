@@ -3,13 +3,21 @@ name = "netutils"
 version = "0.1.0"
 authors = ["Jeremy Soller <jackpot51@gmail.com>"]
 
+[lib]
+name = "netutils"
+path = "src/lib/lib.rs"
+
 [[bin]]
 name = "dhcpd"
 path = "src/dhcpd/main.rs"
 
 [[bin]]
-name = "dnsd"
-path = "src/dnsd/main.rs"
+name = "dns"
+path = "src/dns/main.rs"
+
+[[bin]]
+name = "httpd"
+path = "src/httpd/main.rs"
 
 [[bin]]
 name = "irc"
