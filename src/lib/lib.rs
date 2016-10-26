@@ -267,8 +267,8 @@ impl Tcp {
         self.header.checksum.data = Checksum::compile(unsafe {
             Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len()) +
             Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len()) +
-            Checksum::sum((&proto as *const n16) as usize, mem::size_of::<n16>()) +
             Checksum::sum((&segment_len as *const n16) as usize, mem::size_of::<n16>()) +
+            Checksum::sum((&proto as *const n16) as usize, mem::size_of::<n16>()) +
             Checksum::sum((&self.header as *const TcpHeader) as usize, mem::size_of::<TcpHeader>()) +
             Checksum::sum(self.options.as_ptr() as usize, self.options.len()) +
             Checksum::sum(self.data.as_ptr() as usize, self.data.len())
