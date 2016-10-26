@@ -104,6 +104,7 @@ pub struct ArpHeader {
     pub dst_ip: Ipv4Addr,
 }
 
+#[derive(Clone)]
 pub struct Arp {
     pub header: ArpHeader,
     pub data: Vec<u8>,
@@ -186,6 +187,7 @@ pub struct Ipv4Header {
     pub dst: Ipv4Addr,
 }
 
+#[derive(Clone)]
 pub struct Ipv4 {
     pub header: Ipv4Header,
     pub options: Vec<u8>,
@@ -252,6 +254,7 @@ pub struct TcpHeader {
     pub urgent_pointer: n16,
 }
 
+#[derive(Clone)]
 pub struct Tcp {
     pub header: TcpHeader,
     pub options: Vec<u8>,
@@ -314,6 +317,7 @@ pub struct UdpHeader {
     pub checksum: Checksum,
 }
 
+#[derive(Clone)]
 pub struct Udp {
     pub header: UdpHeader,
     pub data: Vec<u8>,
