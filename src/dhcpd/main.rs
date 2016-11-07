@@ -156,7 +156,14 @@ fn dhcp(quiet: bool) {
             }
         }
 
-        if let Some(dns) = dns_option {
+        if let Some(mut dns) = dns_option {
+            if dns[0] == 127 {
+                let opendns = [208, 67, 222, 222].to_vec();
+                println!("DHCP: Received sarcastic DNS suggestion {}.{}.{}.{}, using {}.{}.{}.{} instead",
+                        dns[0], dns[1], dns[2], dns[3], opendns[0], opendns[1], opendns[2], opendns[3]);
+                dns = opendns;
+            }
+
             setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])).expect("dhcpd: failed to set dns");
 
             if ! quiet {
