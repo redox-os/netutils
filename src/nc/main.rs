@@ -4,7 +4,7 @@ use std::io::{self, Write};
 mod modes;
 use modes::*;
 
-static MAN_PAGE: &'static str = /* @MANSTART{tail} */ r#"
+static MAN_PAGE: &'static str = /* @MANSTART{nc} */ r#"
 NAME
     nc - Concatenate and redirect sockets
 SYNOPSIS
