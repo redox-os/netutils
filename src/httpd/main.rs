@@ -1,9 +1,11 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::{str, thread};
+use std::str;
+
+extern crate syscall;
 
 fn main() {
-    thread::spawn(|| {
+    if unsafe { syscall::clone(0).unwrap() } == 0 {
         let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
         loop {
             let mut stream = listener.accept().unwrap().0;
@@ -26,5 +28,5 @@ fn main() {
 
             print!("{}", info);
         }
-    });
+    }
 }

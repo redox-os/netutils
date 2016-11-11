@@ -1,7 +1,8 @@
 extern crate netutils;
+extern crate syscall;
 
 use netutils::{getcfg, setcfg, MacAddr};
-use std::{env, thread, time};
+use std::{env, time};
 use std::net::UdpSocket;
 
 use dhcp::Dhcp;
@@ -231,9 +232,9 @@ fn main(){
     }
 
     if background {
-        thread::spawn(move || {
+        if unsafe { syscall::clone(0).unwrap() } == 0 {
             dhcp(quiet);
-        });
+        }
     } else {
         dhcp(quiet);
     }
