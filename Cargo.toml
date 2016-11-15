@@ -32,4 +32,9 @@ name = "wget"
 path = "src/wget/main.rs"
 
 [dependencies]
+suruga = { git = "https://github.com/redox-os/suruga.git" }
 termion = "1.0"
+
+[replace]
+"libc:0.2.17" = { git = "https://github.com/rust-lang/libc.git" }
+"rand:0.3.14" = { git = "https://github.com/rust-lang-nursery/rand.git" }
