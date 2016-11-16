@@ -28,10 +28,15 @@ name = "nc"
 path = "src/nc/main.rs"
 
 [[bin]]
+name = "ntp"
+path = "src/ntp/main.rs"
+
+[[bin]]
 name = "wget"
 path = "src/wget/main.rs"
 
 [dependencies]
+ntpclient = { git = "https://github.com/redox-os/ntpclient-rust.git" }
 suruga = { git = "https://github.com/redox-os/suruga.git" }
 termion = "1.0"
 
