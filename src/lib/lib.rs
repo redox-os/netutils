@@ -19,7 +19,7 @@ pub fn getcfg(key: &str) -> Result<String> {
 
 pub fn setcfg(key: &str, value: &str) -> Result<()> {
     let mut file = File::create(&format!("/etc/net/{}", key))?;
-    file.write_all(value.as_bytes())?;
+    file.write(value.as_bytes())?;
     file.set_len(value.len() as u64)?;
     file.sync_all()?;
     Ok(())
