@@ -12,12 +12,16 @@ mod mac;
 
 pub fn getcfg(key: &str) -> Result<String> {
     let mut value = String::new();
-    File::open(&format!("/etc/net/{}", key))?.read_to_string(&mut value)?;
+    let mut file = File::open(&format!("/etc/net/{}", key))?;
+    file.read_to_string(&mut value)?;
     Ok(value.trim().to_string())
 }
 
 pub fn setcfg(key: &str, value: &str) -> Result<()> {
-    File::create(&format!("/etc/net/{}", key))?.write_all(value.as_bytes())?;
+    let mut file = File::create(&format!("/etc/net/{}", key))?;
+    file.write_all(value.as_bytes())?;
+    file.set_len(value.len() as u64)?;
+    file.sync_all()?;
     Ok(())
 }
 
