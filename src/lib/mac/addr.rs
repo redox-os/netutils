@@ -33,7 +33,7 @@ impl MacAddr {
             if i > 0 {
                 string.push('.');
             }
-            string.push_str(&format!("{:X}", self.bytes[i]));
+            string.push_str(&format!("{:>02X}", self.bytes[i]));
         }
         string
     }
