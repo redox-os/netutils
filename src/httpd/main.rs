@@ -6,7 +6,7 @@ use std::io::{Error, ErrorKind, Result, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 
-fn read_dir(root: &Path, path: &Path) -> Result<Vec<u8>> {
+fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     let mut names = vec![];
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -39,19 +39,34 @@ fn read_dir(root: &Path, path: &Path) -> Result<Vec<u8>> {
     }
     response.push_str("</body>\n</html>\n");
 
-    Ok(response.into_bytes())
+    let headers = format!("Content-Type: text/html\r\n").into_bytes();
+
+    Ok((headers, response.into_bytes()))
 }
 
-fn read_file(_root: &Path, path: &Path) -> Result<Vec<u8>> {
-    let mut response = Vec::new();
-
+fn read_file(_root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     let mut file = File::open(path)?;
+
+    let mut response = Vec::new();
     file.read_to_end(&mut response)?;
 
-    Ok(response)
+    let extension = path.extension().map_or("", |ext_os| ext_os.to_str().unwrap_or(""));
+    let mime_type = match extension {
+        "css" => "text/css",
+        "html" => "text/html",
+        "js" => "text/javascript",
+        "jpg" | "jpeg" => "text/jpeg",
+        "png" => "image/png",
+        "svg" => "image/svg+xml",
+        _ => "text/plain"
+    };
+
+    let headers = format!("Content-Type: {}\r\n", mime_type).into_bytes();
+
+    Ok((headers, response))
 }
 
-fn read_path(root: &Path, path: &Path) -> Result<Vec<u8>> {
+fn read_path(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     if path.is_dir() {
         let mut index_path = path.to_path_buf();
         index_path.push("index.html");
@@ -65,7 +80,7 @@ fn read_path(root: &Path, path: &Path) -> Result<Vec<u8>> {
     }
 }
 
-fn read_req(root: &Path, request: &str) -> Result<Vec<u8>> {
+fn read_req(root: &Path, request: &str) -> Result<(Vec<u8>, Vec<u8>)> {
     let get = request.lines().next().ok_or(Error::new(ErrorKind::InvalidInput, "Request line not found"))?;
     let path = get.split(' ').nth(1).ok_or(Error::new(ErrorKind::InvalidInput, "Path not found"))?;
 
@@ -89,11 +104,14 @@ fn http(root: &Path) {
         let request = str::from_utf8(&data[.. count]).unwrap();
 
         let response = match read_req(root, request) {
-            Ok(mut response) => {
-                let mut header = format!("HTTP/1.1 200 OK\r\n\r\n").into_bytes();
-                header.append(&mut response);
-                header
-            }
+            Ok((mut headers, mut response)) => {
+                let mut full_response = format!("HTTP/1.1 200 OK\r\n").into_bytes();
+                full_response.append(&mut headers);
+                full_response.push(b'\r');
+                full_response.push(b'\n');
+                full_response.append(&mut response);
+                full_response
+            },
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => format!("HTTP/1.1 404 Not Found\r\n\r\n{}", err).into_bytes(),
                 ErrorKind::InvalidInput => format!("HTTP/1.1 400 Bad Request\r\n\r\n{}", err).into_bytes(),
