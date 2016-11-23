@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "redox"), feature(libc))]
+
 use std::{env, str};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind, Result, Read, Write};
@@ -105,6 +107,18 @@ fn http(root: &Path) {
     }
 }
 
+#[cfg(target_os = "redox")]
+fn fork()  -> usize {
+    extern crate syscall;
+    unsafe { syscall::clone(0).unwrap() }
+}
+
+#[cfg(not(target_os = "redox"))]
+fn fork()  -> usize {
+    extern crate libc;
+    unsafe { libc::fork() as usize }
+}
+
 fn main() {
     let mut background = false;
     let mut root = env::current_dir().unwrap();
@@ -115,10 +129,9 @@ fn main() {
         }
     }
 
-    println!("Root {}", root.display());
+    println!("HTTP: {}", root.display());
     if background {
-        //if unsafe { syscall::clone(0).unwrap() } == 0
-        {
+        if fork() == 0 {
             http(&root);
         }
     } else {
