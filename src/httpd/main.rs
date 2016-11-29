@@ -14,10 +14,21 @@ fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
             names.push(name.to_string());
         }
     }
-    names.sort();
 
     let mut response = String::new();
-    response.push_str("<!DOCTYPE html>\n<html>\n<body>\n");
+    response.push_str("<!DOCTYPE html>\n<html><body>");
+    if let Ok(relative) = path.strip_prefix(root){
+        if let Some(href) = relative.to_str() {
+            if ! href.is_empty() {
+                names.push("..".to_string());
+            }
+            response.push_str("<h1>Index of /");
+            response.push_str(href);
+            response.push_str("</h1>\n");
+        }
+    }
+
+    names.sort();
     for name in names {
         let mut name_path = path.to_path_buf();
         name_path.push(&name);
@@ -37,7 +48,7 @@ fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
             response.push_str("<br/>\n");
         }
     }
-    response.push_str("</body>\n</html>\n");
+    response.push_str("</body></html>");
 
     let headers = format!("Content-Type: text/html\r\n").into_bytes();
 
@@ -84,13 +95,13 @@ fn read_req(root: &Path, request: &str) -> Result<(Vec<u8>, Vec<u8>)> {
     let get = request.lines().next().ok_or(Error::new(ErrorKind::InvalidInput, "Request line not found"))?;
     let path = get.split(' ').nth(1).ok_or(Error::new(ErrorKind::InvalidInput, "Path not found"))?;
 
-    if ! path.starts_with('/') || path.contains("..") {
-        return Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"));
-    }
-
     let mut full_path = root.to_path_buf();
     full_path.push(path.trim_left_matches('/'));
-    read_path(root, &full_path)
+    if full_path.as_path().strip_prefix(root).is_ok() {
+        read_path(root, &full_path)
+    } else {
+        Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"))
+    }
 }
 
 fn http(root: &Path) {
