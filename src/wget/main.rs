@@ -1,10 +1,14 @@
-extern crate suruga;
+extern crate rustls;
+extern crate webpki_roots;
+
+use rustls::Session;
 
 use std::env;
 use std::io::{stderr, stdout, Read, Write};
 use std::net::TcpStream;
 use std::process;
 use std::str;
+use std::sync::Arc;
 
 fn main() {
     if let Some(url) = env::args().nth(1) {
@@ -33,20 +37,34 @@ fn main() {
             let mut response = Vec::new();
 
             if https {
-                let mut tls = suruga::TlsClient::from_tcp(stream).unwrap();
+                let mut config = rustls::ClientConfig::new();
+                config.root_store.add_trust_anchors(&webpki_roots::ROOTS[..]);
+                let rc_config = Arc::new(config);
 
-                tls.write(request.as_bytes()).unwrap();
-                tls.flush().unwrap();
+                let mut client = rustls::ClientSession::new(&rc_config, host);
+                client.write(request.as_bytes()).unwrap();
+                client.write_tls(&mut stream).unwrap();
 
                 write!(stderr(), "* Waiting for response\n").unwrap();
 
-                loop {
-                    let mut buf = [0; 65536];
-                    let count = tls.read(&mut buf).unwrap();
-                    if count == 0 {
-                        break;
+                'reading:loop {
+                    while client.wants_read() {
+                        client.read_tls(&mut stream).unwrap();
+                        client.process_new_packets().unwrap();
+                        while client.wants_write() {
+                            client.write_tls(&mut stream).unwrap();
+                        }
                     }
-                    response.extend_from_slice(&buf[.. count]);
+
+                    let mut buf = [0; 65536];
+                    loop {
+                        let bytes = client.read(&mut buf).unwrap();
+                        if bytes < buf.len() {
+                            response.append(&mut buf[..bytes].to_vec());
+                            break 'reading;
+                        }
+                        response.append(&mut buf.to_vec());
+                    }
                 }
             } else {
                 stream.write(request.as_bytes()).unwrap();
