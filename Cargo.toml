@@ -37,6 +37,7 @@ path = "src/wget/main.rs"
 
 [dependencies]
 ntpclient = { git = "https://github.com/redox-os/ntpclient-rust.git" }
+redox_syscall = { git = "https://github.com/redox-os/syscall.git" }
 rustls = { git = "https://github.com/redox-os/rustls.git" }
 termion = "1.0"
 webpki-roots = { git = "https://github.com/redox-os/webpki-roots.git" }
