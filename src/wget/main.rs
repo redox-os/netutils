@@ -44,6 +44,7 @@ fn main() {
                 let mut client = rustls::ClientSession::new(&rc_config, host);
                 client.write(request.as_bytes()).unwrap();
                 client.write_tls(&mut stream).unwrap();
+                stream.flush().unwrap();
 
                 write!(stderr(), "* Waiting for response\n").unwrap();
 
@@ -51,19 +52,31 @@ fn main() {
                     while client.wants_read() {
                         client.read_tls(&mut stream).unwrap();
                         client.process_new_packets().unwrap();
+
                         while client.wants_write() {
                             client.write_tls(&mut stream).unwrap();
+                            stream.flush().unwrap();
                         }
                     }
 
                     let mut buf = [0; 65536];
                     loop {
-                        let bytes = client.read(&mut buf).unwrap();
-                        if bytes < buf.len() {
-                            response.append(&mut buf[..bytes].to_vec());
-                            break 'reading;
+                        match client.read(&mut buf) {
+                            Ok(0) => {
+                                if client.wants_read() {
+                                    break;
+                                } else {
+                                    break 'reading;
+                                }
+                            }
+                            Ok(bytes) => {
+                                response.append(&mut buf[..bytes].to_vec());
+                            }
+                            Err(err) => {
+                                write!(stderr(), "* Read error: {}\n", err).unwrap();
+                                break 'reading;
+                            }
                         }
-                        response.append(&mut buf.to_vec());
                     }
                 }
             } else {
@@ -97,6 +110,7 @@ fn main() {
             }
 
             stdout().write(&response[header_end + 4 ..]).unwrap();
+            stdout().flush().unwrap();
         } else {
             write!(stderr(), "wget: unknown scheme '{}'\n", scheme).unwrap();
             process::exit(1);
