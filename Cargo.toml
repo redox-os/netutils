@@ -32,6 +32,10 @@ name = "ntp"
 path = "src/ntp/main.rs"
 
 [[bin]]
+name = "telnetd"
+path = "src/telnetd/main.rs"
+
+[[bin]]
 name = "wget"
 path = "src/wget/main.rs"
 
@@ -41,3 +45,9 @@ redox_syscall = { git = "https://github.com/redox-os/syscall.git" }
 rustls = { git = "https://github.com/redox-os/rustls.git" }
 termion = "1.0"
 webpki-roots = { git = "https://github.com/redox-os/webpki-roots.git" }
+
+[target.'cfg(not(target_os = "redox"))'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "redox")'.dependencies]
+redox_syscall = { git = "https://github.com/redox-os/syscall.git" }
