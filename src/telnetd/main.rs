@@ -11,7 +11,7 @@ extern crate syscall;
 use std::{env, str};
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Result, Read, Write};
+use std::io::{self, ErrorKind, Result, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::process::CommandExt;
@@ -38,54 +38,44 @@ pub fn before_exec() -> Result<()> {
 }
 
 #[cfg(target_os = "redox")]
-fn handle(socket: &mut TcpStream, master_fd: RawFd) {
+fn handle(stream: &mut TcpStream, master_fd: RawFd) {
     extern crate syscall;
 
     use std::os::unix::io::AsRawFd;
 
     let mut event_file = File::open("event:").expect("telnetd: failed to open event file");
 
-    let window_fd = console.window.as_raw_fd();
-    syscall::fevent(window_fd, syscall::flag::EVENT_READ).expect("telnetd: failed to fevent console window");
+    let stream_fd = stream.as_raw_fd();
+    syscall::fevent(stream_fd, syscall::flag::EVENT_READ).expect("telnetd: failed to fevent console window");
 
     let mut master = unsafe { File::from_raw_fd(master_fd) };
     syscall::fevent(master_fd, syscall::flag::EVENT_READ).expect("telnetd: failed to fevent master PTY");
 
     let mut handle_event = |event_id: usize, event_count: usize| -> bool {
-        if event_id == window_fd {
-            for event in console.window.events() {
-                if event.code == event::EVENT_QUIT {
+        if event_id == stream_fd {
+            let mut inbound = [0; 4096];
+            match stream.read(&mut inbound) {
+                Ok(count) => if count == 0 {
                     return false;
+                } else {
+                    master.write(&inbound[..count]).expect("telnetd: failed to write to pty");
+                    master.flush().expect("telnetd: failed to flush pty");
+                },
+                Err(err) => match err.kind() {
+                    ErrorKind::WouldBlock => (),
+                    _ => panic!("telnetd: failed to read stream: {:?}", err)
                 }
-
-                console.input(&event);
-            }
-
-            if ! console.input.is_empty()  {
-                if let Err(err) = master.write(&console.input) {
-                    let term_stderr = io::stderr();
-                    let mut term_stderr = term_stderr.lock();
-
-                    let _ = term_stderr.write(b"failed to write stdin: ");
-                    let _ = term_stderr.write(err.description().as_bytes());
-                    let _ = term_stderr.write(b"\n");
-                    return false;
-                }
-                console.input.clear();
             }
         } else if event_id == master_fd {
-            let mut packet = [0; 4096];
-            let count = master.read(&mut packet).expect("telnetd: failed to read master PTY");
+            let mut outbound = [0; 4096];
+            let count = master.read(&mut outbound).expect("telnetd: failed to read master PTY");
             if count == 0 {
                 if event_count == 0 {
                     return false;
                 }
             } else {
-                console.write(&packet[1..count], true).expect("telnetd: failed to write to console");
-
-                if packet[0] & 1 == 1 {
-                    console.redraw();
-                }
+                stream.write(&outbound[1..count]).expect("telnetd: failed to write to stream");
+                stream.flush().expect("telnetd: failed to flush stream");
             }
         } else {
             println!("Unknown event {}", event_id);
@@ -94,7 +84,7 @@ fn handle(socket: &mut TcpStream, master_fd: RawFd) {
         true
     };
 
-    handle_event(window_fd, 0);
+    handle_event(stream_fd, 0);
     handle_event(master_fd, 0);
 
     'events: loop {
@@ -107,10 +97,8 @@ fn handle(socket: &mut TcpStream, master_fd: RawFd) {
 }
 
 #[cfg(not(target_os = "redox"))]
-fn handle(socket: &mut TcpStream, master_fd: RawFd) {
+fn handle(stream: &mut TcpStream, master_fd: RawFd) {
     use libc;
-    use std::io::ErrorKind;
-    use std::thread;
     use std::time::Duration;
 
     unsafe {
@@ -123,13 +111,11 @@ fn handle(socket: &mut TcpStream, master_fd: RawFd) {
         libc::ioctl(master_fd, libc::TIOCSWINSZ, &size as *const libc::winsize);
     }
 
-    socket.set_nonblocking(true).expect("telnetd: failed to set nonblocking");
-
     let mut master = unsafe { File::from_raw_fd(master_fd) };
 
     loop {
         let mut inbound = [0; 4096];
-        match socket.read(&mut inbound) {
+        match stream.read(&mut inbound) {
             Ok(count) => if count == 0 {
                 return;
             } else {
@@ -147,8 +133,8 @@ fn handle(socket: &mut TcpStream, master_fd: RawFd) {
             Ok(count) => if count == 0 {
                 return;
             } else {
-                socket.write(&outbound[1..count]).expect("telnetd: failed to write to stream");
-                socket.flush().expect("telnetd: failed to flush stream");
+                stream.write(&outbound[1..count]).expect("telnetd: failed to write to stream");
+                stream.flush().expect("telnetd: failed to flush stream");
             },
             Err(err) => match err.kind() {
                 ErrorKind::WouldBlock => (),
@@ -166,6 +152,8 @@ fn telnet() {
         let (mut stream, address) = listener.accept().unwrap();
         thread::spawn(move || {
             println!("Connection from {} opened", address);
+
+            stream.set_nonblocking(true).expect("telnetd: failed to set nonblocking");
 
             let (master_fd, tty_path) = getpty();
 
