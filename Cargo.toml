@@ -40,14 +40,11 @@ name = "wget"
 path = "src/wget/main.rs"
 
 [dependencies]
-ntpclient = { git = "https://github.com/redox-os/ntpclient-rust.git" }
-redox_syscall = { git = "https://github.com/redox-os/syscall.git" }
-rustls = { git = "https://github.com/redox-os/rustls.git" }
+ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
+redox_syscall = "0.1"
+rustls = "0.5"
 termion = "1.0"
-webpki-roots = { git = "https://github.com/redox-os/webpki-roots.git" }
+webpki-roots = "0.6"
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 libc = "0.2"
-
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = { git = "https://github.com/redox-os/syscall.git" }

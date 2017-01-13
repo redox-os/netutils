@@ -1,8 +1,9 @@
+#![deny(warnings)]
+
 extern crate ntpclient;
 
 use ntpclient::retrieve_ntp_timestamp;
 use std::env;
-use std::time::UNIX_EPOCH;
 
 fn format_time(mut ts: i64) -> String {
     let s = ts%86400;
@@ -29,6 +30,5 @@ fn format_time(mut ts: i64) -> String {
 fn main() {
     let server = env::args().nth(1).unwrap_or("pool.ntp.org".to_string());
     let ntp_time = retrieve_ntp_timestamp(&server).unwrap();
-    let epoch = ntp_time.duration_since(UNIX_EPOCH).unwrap();
-    println!("{}: {}", server, format_time(epoch.as_secs() as i64));
+    println!("{}: {}", server, format_time(ntp_time.sec));
 }
