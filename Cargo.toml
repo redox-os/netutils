@@ -44,7 +44,7 @@ ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
 rustls = "0.5"
 termion = "1.0"
-webpki-roots = "0.6"
+webpki-roots = "0.7"
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 libc = "0.2"
