@@ -39,11 +39,16 @@ path = "src/telnetd/main.rs"
 name = "wget"
 path = "src/wget/main.rs"
 
+[[bin]]
+name = "httpschemed"
+path = "src/httpschemed/main.rs"
+
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
 termion = "1.0"
 hyper-rustls = "0.3"
+spin = "0.4"
 
 [dependencies.hyper]
 version = "0.10"
