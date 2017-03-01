@@ -22,15 +22,20 @@ use spin::Mutex;
 pub struct HttpScheme {
     client: Client,
     responses: Mutex<BTreeMap<usize, Box<Response>>>,
-    next_id: AtomicUsize
+    next_id: AtomicUsize,
+    prefix: String
 }
 
 impl HttpScheme {
-    pub fn new() -> HttpScheme {
+    pub fn new(scheme: &str) -> HttpScheme {
+        let mut prefix = String::from(scheme);
+        prefix.push_str("://");
+
         HttpScheme {
             client: Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new())),
             responses: Mutex::new(BTreeMap::new()),
-            next_id: AtomicUsize::new(1)
+            next_id: AtomicUsize::new(1),
+            prefix: prefix
         }
     }
 }
@@ -39,7 +44,7 @@ impl SchemeMut for HttpScheme {
     fn open(&mut self, path: &[u8], _flags: usize, _uid: u32, _gid: u32) -> Result<usize> {
         match str::from_utf8(path) {
             Ok(path) => {
-                let mut url = String::from("http://");
+                let mut url = self.prefix.clone();
                 url.push_str(path);
 
                 match self.client.get(&url).send() {
@@ -79,13 +84,21 @@ impl SchemeMut for HttpScheme {
 
 
 fn main() {
-    let mut socket = File::create(":http").expect("http: failed to create http scheme");
-    let mut scheme = HttpScheme::new();
+    let prot = std::env::args().nth(1).unwrap();
 
-    loop {
-        let mut packet = Packet::default();
-        socket.read(&mut packet).expect("http: failed to read events from http scheme");
-        scheme.handle(&mut packet);
-        socket.write(&packet).expect("http: failed to write responses to http scheme");
+    // Daemonize
+    if unsafe { syscall::clone(0).unwrap() } == 0 {
+        let mut socket = File::create(format!(":{}", &prot))
+            .expect(&format!("hyperd: failed to create {} scheme", prot));
+        let mut scheme = HttpScheme::new(&prot);
+
+        loop {
+            let mut packet = Packet::default();
+            socket.read(&mut packet)
+                .expect(&format!("hyperd: failed to read events from {} scheme", prot));
+            scheme.handle(&mut packet);
+            socket.write(&packet)
+                .expect(&format!("hyperd: failed to write responses to {} scheme", prot));
+        }
     }
 }

@@ -40,8 +40,8 @@ name = "wget"
 path = "src/wget/main.rs"
 
 [[bin]]
-name = "httpschemed"
-path = "src/httpschemed/main.rs"
+name = "hyperd"
+path = "src/hyperd/main.rs"
 
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
