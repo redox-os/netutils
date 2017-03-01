@@ -42,9 +42,7 @@ path = "src/wget/main.rs"
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
-rustls = "0.5"
 termion = "1.0"
-webpki-roots = "0.7"
 hyper-rustls = "0.3"
 
 [dependencies.hyper]
