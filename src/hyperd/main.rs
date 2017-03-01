@@ -9,17 +9,19 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::io::{Read, Write};
 use std::str;
 
-use syscall::error::{Error, Result, EBADF, ENOENT};
+use syscall::error::{Error, Result, EBADF, ENOENT, EACCES, EINVAL, EIO, EPROTO};
 use syscall::{Packet, SchemeMut};
 
 use hyper::Client;
 use hyper::net::HttpsConnector;
 use hyper::client::response::Response;
+use hyper::status::StatusCode;
+use hyper::error::Error as HyperError;
 
 use spin::Mutex;
 
 
-pub struct HttpScheme {
+struct HttpScheme {
     client: Client,
     responses: Mutex<BTreeMap<usize, Box<Response>>>,
     next_id: AtomicUsize,
@@ -42,21 +44,31 @@ impl HttpScheme {
 
 impl SchemeMut for HttpScheme {
     fn open(&mut self, path: &[u8], _flags: usize, _uid: u32, _gid: u32) -> Result<usize> {
-        match str::from_utf8(path) {
-            Ok(path) => {
-                let mut url = self.prefix.clone();
-                url.push_str(path);
+        let path = str::from_utf8(path).or(Err(Error::new(EINVAL)))?;
 
-                match self.client.get(&url).send() {
-                    Ok(res) => {
+        let mut url = self.prefix.clone();
+        url.push_str(path);
+
+        match self.client.get(&url).send() {
+            Ok(res) => {
+                match res.status {
+                    StatusCode::Ok => {
                         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
                         self.responses.lock().insert(id, Box::new(res));
                         Ok(id)
                     }
-                    Err(_) => Err(Error::new(ENOENT)) // TODO: Handle specific error types
+                    StatusCode::NotFound => Err(Error::new(ENOENT)),
+                    StatusCode::Forbidden => Err(Error::new(EACCES)),
+                    // TODO: Handle more
+                    _ => Err(Error::new(ENOENT))
                 }
-            },
-            Err(_) => Err(Error::new(ENOENT)) // TODO: Handle specific error types
+            }
+            Err(err) => Err(Error::new(match err {
+                HyperError::Uri(_) | HyperError::Utf8(_) => EINVAL,
+                HyperError::Io(_) => EIO,
+                // TODO: Handle more
+                _ => EPROTO
+            }))
         }
     }
 
@@ -65,7 +77,7 @@ impl SchemeMut for HttpScheme {
         if let Some(mut res) = responses.get_mut(&id) {
             match res.read(buf) {
                 Ok(num) => Ok(num),
-                Err(_) => Err(Error::new(EBADF)) // TODO: Handle specific error types
+                Err(_) => Err(Error::new(EIO))
             }
         } else {
             Err(Error::new(EBADF))
