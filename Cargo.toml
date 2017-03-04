@@ -39,6 +39,10 @@ path = "src/telnetd/main.rs"
 name = "wget"
 path = "src/wget/main.rs"
 
+[[bin]]
+name = "ip"
+path = "src/ip/main.rs"
+
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
