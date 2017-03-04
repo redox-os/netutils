@@ -43,6 +43,10 @@ path = "src/wget/main.rs"
 name = "ip"
 path = "src/ip/main.rs"
 
+[[bin]]
+name = "echoserver"
+path = "src/echoserver/main.rs"
+
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
