@@ -4,12 +4,15 @@ extern crate hyper_rustls;
 use std::env;
 use std::io::{stderr, stdout, Read, Write};
 use std::process;
+use std::time::Duration;
 use hyper::Client;
 use hyper::net::HttpsConnector;
 
 fn main() {
     if let Some(url) = env::args().nth(1) {
-        let client = Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+        let mut client = Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+        client.set_read_timeout(Some(Duration::new(5, 0)));
+        client.set_write_timeout(Some(Duration::new(5, 0)));
         match client.get(&url).send() {
             Ok(mut res) => {
                 let mut data = Vec::new();
