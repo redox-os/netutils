@@ -50,7 +50,7 @@ fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     }
     response.push_str("</body></html>");
 
-    let headers = format!("Content-Type: text/html\r\n").into_bytes();
+    let headers = format!("Content-Type: text/html\r\nContent-Length: {}\r\n", response.len()).into_bytes();
 
     Ok((headers, response.into_bytes()))
 }
@@ -72,7 +72,7 @@ fn read_file(_root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
         _ => "text/plain"
     };
 
-    let headers = format!("Content-Type: {}\r\n", mime_type).into_bytes();
+    let headers = format!("Content-Type: {}\r\nContent-Length: {}\r\n", mime_type, response.len()).into_bytes();
 
     Ok((headers, response))
 }
