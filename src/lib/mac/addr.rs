@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct MacAddr {
     pub bytes: [u8; 6],
 }
@@ -7,34 +7,70 @@ impl MacAddr {
     pub const BROADCAST: MacAddr = MacAddr { bytes: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] };
 
     pub fn from_str(string: &str) -> Self {
-        let mut addr = MacAddr { bytes: [0, 0, 0, 0, 0, 0] };
+        MacAddr::try_parse_with_delimeter(string, ':')
+            .or_else(|| MacAddr::try_parse_with_delimeter(string, '-'))
+            .unwrap_or_default()
+    }
 
-        let mut i = 0;
-        for part in string.split('.') {
-            let octet = u8::from_str_radix(part, 16).unwrap_or(0);
-            match i {
-                0 => addr.bytes[0] = octet,
-                1 => addr.bytes[1] = octet,
-                2 => addr.bytes[2] = octet,
-                3 => addr.bytes[3] = octet,
-                4 => addr.bytes[4] = octet,
-                5 => addr.bytes[5] = octet,
-                _ => break,
+    fn try_parse_with_delimeter(string: &str, delimeter: char) -> Option<MacAddr> {
+        let mut addr = MacAddr::default();
+        let mut segments = 0;
+
+        for part in string.split(delimeter) {
+            if segments >= addr.bytes.len() {
+                return None;
             }
-            i += 1;
+            addr.bytes[segments] = match u8::from_str_radix(part, 16) {
+                Ok(b) => b,
+                _ => return None,
+            };
+            segments += 1;
         }
 
-        addr
+        if segments == addr.bytes.len() {
+            Some(addr)
+        } else {
+            None
+        }
     }
 
     pub fn to_string(&self) -> String {
-        let mut string = String::new();
-        for i in 0..6 {
-            if i > 0 {
-                string.push('.');
-            }
-            string.push_str(&format!("{:>02X}", self.bytes[i]));
-        }
-        string
+        format!("{:>02X}:{:>02X}:{:>02X}:{:>02X}:{:>02X}:{:>02X}",
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+                self.bytes[4],
+                self.bytes[5])
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::MacAddr;
+
+    #[test]
+    fn from_str_test() {
+        let mac = MacAddr { bytes: [0x01, 0x23, 0x45, 0x67, 0x89, 0xab] };
+        let empty_mac = MacAddr::default();
+
+        assert_eq!(mac, MacAddr::from_str("01:23:45:67:89:ab"));
+        assert_eq!(mac, MacAddr::from_str("1:23:45:67:89:ab"));
+        assert_eq!(mac, MacAddr::from_str("01:23:45:67:89:AB"));
+        assert_eq!(mac, MacAddr::from_str("01-23-45-67-89-ab"));
+        assert_eq!(empty_mac, MacAddr::from_str(""));
+        assert_eq!(empty_mac, MacAddr::from_str("01:23:45:67:89"));
+        assert_eq!(empty_mac, MacAddr::from_str("01:23:45:67:89:ab:cd"));
+        assert_eq!(empty_mac, MacAddr::from_str("x1:23:45:67:89:ab"));
+        assert_eq!(empty_mac, MacAddr::from_str("01:23-45-67-89-ab"));
+        assert_eq!(empty_mac, MacAddr::from_str("01-23-45-67-89-ag"));
+        assert_eq!(empty_mac, MacAddr::from_str("01.23.45.67.89.ab"));
+        assert_eq!(empty_mac, MacAddr::from_str("01234-23-45-67-89-ab"));
+        assert_eq!(empty_mac, MacAddr::from_str("01--23-45-67-89-ab"));
+        assert_eq!(empty_mac, MacAddr::from_str("12"));
+        assert_eq!(empty_mac, MacAddr::from_str("0:0:0:0:0:0"));
+
+        assert_eq!(mac, MacAddr::from_str(&mac.to_string()));
+        assert_eq!(empty_mac, MacAddr::from_str(&empty_mac.to_string()));
     }
 }
