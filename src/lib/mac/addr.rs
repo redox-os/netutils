@@ -35,7 +35,7 @@ impl MacAddr {
     }
 
     pub fn to_string(&self) -> String {
-        format!("{:>02X}:{:>02X}:{:>02X}:{:>02X}:{:>02X}:{:>02X}",
+        format!("{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}",
                 self.bytes[0],
                 self.bytes[1],
                 self.bytes[2],
