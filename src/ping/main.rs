@@ -18,7 +18,7 @@ use std::slice;
 use std::str::FromStr;
 use syscall::data::TimeSpec;
 
-static PING_MAN: &'static str = r#"
+static PING_MAN: &'static str = /* @MANSTART{ping} */ r#"
 NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
