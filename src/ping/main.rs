@@ -1,3 +1,5 @@
+#![feature(lookup_host)]
+
 extern crate syscall;
 extern crate event;
 
@@ -5,24 +7,42 @@ use event::EventQueue;
 use std::cell::RefCell;
 use std::env::args;
 use std::fs::File;
-use std::io::{Read, Write, Result, Error};
+use std::io::{Read, Write, Result, Error, ErrorKind};
 use std::mem;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddr, lookup_host};
 use std::ops::{DerefMut, Deref};
-use std::os::unix::io::FromRawFd;
+use std::os::unix::io::{RawFd, FromRawFd};
 use std::process;
 use std::rc::Rc;
 use std::slice;
 use std::str::FromStr;
 use syscall::data::TimeSpec;
 
-static PING_PERIOD: TimeSpec = TimeSpec {
-    tv_sec: 1,
-    tv_nsec: 0,
-};
+static PING_MAN: &'static str = r#"
+NAME
+    ping - send ICMP ECHO_REQUEST to network hosts
 
-static PING_TIMEOUT_S: i64 = 5;
+SYNOPSIS
+    ping [-h | --help] [-c count] [-i interval] destination
 
+DESCRIPTION
+    ping sends ICMP ECHO_REQUEST packets to the specified destination host
+    and reports on ECHO_RESPONSE packets it receives back.
+
+OPTIONS
+    -c count
+        Number of packets to send. ping -c 0 will send packets until interrupted.
+
+    -h
+    --help
+        Print this manual page.
+
+    -i interval
+        Wait interval seconds before sending next packet.
+"#; /* @MANEND */
+
+const PING_INTERVAL_S: i64 = 1;
+const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
 
 #[repr(C)]
@@ -59,30 +79,22 @@ struct Ping {
     recieved: usize,
     //TODO: replace with BTreeMap once TimeSpec implements Ord
     waiting_for: Vec<(TimeSpec, usize)>,
+    packets_to_send: usize,
+    interval: i64,
 }
 
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    return (((to.tv_sec - from.tv_sec) * 1_000_000i64 +
-             ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64)) as f32 / 1_000.0f32;
-}
-
-fn add_time(a: &TimeSpec, b: &TimeSpec) -> TimeSpec {
-    let mut secs = a.tv_sec + b.tv_sec;
-
-    let mut nsecs = a.tv_nsec + b.tv_nsec;
-    while nsecs >= 1000000000 {
-        nsecs -= 1000000000;
-        secs += 1;
-    }
-
-    TimeSpec {
-        tv_sec: secs,
-        tv_nsec: nsecs,
-    }
+    ((to.tv_sec - from.tv_sec) * 1_000_000i64 +
+     ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64) as f32 / 1_000.0f32
 }
 
 impl Ping {
-    pub fn new(remote_host: Ipv4Addr, echo_file: File, time_file: File) -> Ping {
+    pub fn new(remote_host: Ipv4Addr,
+               packets_to_send: usize,
+               interval: i64,
+               echo_file: File,
+               time_file: File)
+               -> Ping {
         Ping {
             remote_host,
             echo_file,
@@ -90,6 +102,8 @@ impl Ping {
             seq: 0,
             recieved: 0,
             waiting_for: vec![],
+            packets_to_send,
+            interval,
         }
     }
 
@@ -133,15 +147,15 @@ impl Ping {
         }
         self.send_ping(&time)?;
         self.check_timeouts(&time)?;
-        let waiting_till = add_time(&time, &PING_PERIOD);
-        if self.time_file.write(&waiting_till)? < mem::size_of::<TimeSpec>() {
+        time.tv_sec += self.interval;
+        if self.time_file.write(&time)? < mem::size_of::<TimeSpec>() {
             return Err(Error::from_raw_os_error(syscall::EINVAL));
         }
         self.is_finished()
     }
 
     fn send_ping(&mut self, time: &TimeSpec) -> Result<Option<()>> {
-        if self.seq >= PING_PACKETS_TO_SEND {
+        if self.packets_to_send != 0 && self.seq >= self.packets_to_send {
             return Ok(None);
         }
         let payload = EchoPayload {
@@ -170,7 +184,8 @@ impl Ping {
     }
 
     fn is_finished(&self) -> Result<Option<()>> {
-        if self.seq == PING_PACKETS_TO_SEND && self.waiting_for.is_empty() {
+        if self.packets_to_send != 0 && self.seq == self.packets_to_send &&
+           self.waiting_for.is_empty() {
             Ok(Some(()))
         } else {
             Ok(None)
@@ -186,44 +201,80 @@ impl Ping {
     }
 }
 
-fn main() {
-    let remote_host = args().nth(1).expect("Need an address to ping");
-    let remote_host = Ipv4Addr::from_str(&remote_host).expect("Can't parse the address");
-    let icmp_path = format!("icmp:echo/{}", remote_host);
+fn resolve_host(host: &str) -> Result<Ipv4Addr> {
+    Ipv4Addr::from_str(host)
+        .or_else(|_| if let Some(SocketAddr::V4(addr)) = lookup_host(host)?.next() {
+                     Ok(*addr.ip())
+                 } else {
+                     Err(Error::from(ErrorKind::AddrNotAvailable))
+                 })
+}
 
-    let echo_fd = match syscall::open(&icmp_path, syscall::O_RDWR | syscall::O_NONBLOCK) {
-        Ok(fd) => fd,
-        Err(err) => {
-            println!("Can't open path {} {}", icmp_path, err);
-            process::exit(1);
+fn main() {
+    let mut args = args().skip(1);
+    let mut count = PING_PACKETS_TO_SEND;
+    let mut interval = PING_INTERVAL_S;
+    let mut remote_host = "".to_owned();
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!("{}", PING_MAN);
+                return;
+            }
+            "-i" => {
+                interval = i64::from_str(&args.next().expect("no interval argument provided"))
+                    .expect("invalid interval argument");
+                if interval <= 0 {
+                    println!("invalid interval argument");
+                    process::exit(1);
+                }
+            }
+            "-c" => {
+                count = usize::from_str(&args.next().expect("no count argument provided"))
+                    .expect("invalid count argument");
+            }
+            host => {
+                if remote_host.is_empty() {
+                    remote_host = host.to_owned();
+                } else {
+                    println!("too many hosts to ping");
+                    process::exit(1);
+                }
+            }
         }
-    };
+    }
+
+    let remote_host = resolve_host(&remote_host).expect("Can't resolve the remote host");
+
+    let icmp_path = format!("icmp:echo/{}", remote_host);
+    let echo_fd = syscall::open(&icmp_path, syscall::O_RDWR | syscall::O_NONBLOCK)
+        .expect(&format!("Can't open path {}", icmp_path));
 
     let time_path = format!("time:{}", syscall::CLOCK_MONOTONIC);
+    let time_fd = syscall::open(&time_path, syscall::O_RDWR)
+        .expect(&format!("Can't open path {}", time_path));
 
-    let time_fd = match syscall::open(&time_path, syscall::O_RDWR) {
-        Ok(fd) => fd,
-        Err(err) => {
-            println!("Can't open path {} {}", icmp_path, err);
-            process::exit(1);
-        }
-    };
 
     let ping = Rc::new(RefCell::new(Ping::new(remote_host,
-                                              unsafe { File::from_raw_fd(echo_fd) },
-                                              unsafe { File::from_raw_fd(time_fd) })));
+                                              count,
+                                              interval,
+                                              unsafe { File::from_raw_fd(echo_fd as RawFd) },
+                                              unsafe { File::from_raw_fd(time_fd as RawFd) })));
 
     let mut event_queue = EventQueue::<()>::new().expect("Can't create event queue");
 
     let ping_ = ping.clone();
 
     event_queue
-        .add(echo_fd, move |_| ping_.borrow_mut().on_echo_event())
+        .add(echo_fd as RawFd,
+             move |_| ping_.borrow_mut().on_echo_event())
         .expect("Can't wait for echo events");
 
     let ping_ = ping.clone();
     event_queue
-        .add(time_fd, move |_| ping_.borrow_mut().on_time_event())
+        .add(time_fd as RawFd,
+             move |_| ping_.borrow_mut().on_time_event())
         .expect("Can't wait for time events");
 
     event_queue
@@ -239,6 +290,4 @@ fn main() {
              transmited,
              recieved,
              100 * (transmited - recieved) / transmited);
-
-    process::exit(0);
 }
