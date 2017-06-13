@@ -7,7 +7,9 @@ use event::EventQueue;
 use std::cell::RefCell;
 use std::env::args;
 use std::fs::File;
-use std::io::{Read, Write, Result, Error, ErrorKind};
+use std::io::{Read, Write};
+use std::io::Error as IOError;
+use std::num::ParseIntError;
 use std::mem;
 use std::net::{Ipv4Addr, SocketAddr, lookup_host};
 use std::ops::{DerefMut, Deref};
@@ -17,6 +19,9 @@ use std::rc::Rc;
 use std::slice;
 use std::str::FromStr;
 use syscall::data::TimeSpec;
+use std::fmt;
+use std::result;
+use std::convert;
 
 static PING_MAN: &'static str = /* @MANSTART{ping} */ r#"
 NAME
@@ -44,6 +49,64 @@ OPTIONS
 const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
+
+enum ErrorType {
+    IOError(IOError),
+    IntParseError(ParseIntError),
+    LocalError,
+}
+
+struct Error {
+    error_type: ErrorType,
+    descr: String,
+}
+
+impl Error {
+    pub fn new_local<S: Into<String>>(descr: S) -> Error {
+        Error {
+            error_type: ErrorType::LocalError,
+            descr: descr.into(),
+        }
+    }
+
+    pub fn from_int_parse_error<S: Into<String>>(int_parse_error: ParseIntError,
+                                                 descr: S)
+                                                 -> Error {
+        Error {
+            error_type: ErrorType::IntParseError(int_parse_error),
+            descr: descr.into(),
+        }
+    }
+
+    pub fn from_io_error<S: Into<String>>(io_error: IOError, descr: S) -> Error {
+        Error {
+            error_type: ErrorType::IOError(io_error),
+            descr: descr.into(),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
+        match self.error_type {
+            ErrorType::IntParseError(ref int_parse_error) => {
+                write!(f, "{} : int parse error: {}", self.descr, int_parse_error)
+            }
+            ErrorType::IOError(ref io_error) => {
+                write!(f, "{} : io error : {}", self.descr, io_error)
+            }
+            ErrorType::LocalError => write!(f, "{}", self.descr),
+        }
+    }
+}
+
+impl convert::From<IOError> for Error {
+    fn from(e: IOError) -> Self {
+        Error::from_io_error(e, "")
+    }
+}
+
+type Result<T> = result::Result<T, Error>;
 
 #[repr(C)]
 struct EchoPayload {
@@ -118,11 +181,11 @@ impl Ping {
             return Ok(None);
         }
         if readed < mem::size_of::<EchoPayload>() {
-            return Err(Error::from_raw_os_error(syscall::EINVAL));
+            return Err(Error::new_local("Not enough data in the echo file"));
         }
         let mut time = TimeSpec::default();
         syscall::clock_gettime(syscall::CLOCK_MONOTONIC, &mut time)
-            .map_err(|err| Error::from_raw_os_error(err.errno))?;
+            .map_err(|_| Error::new_local("Failed to get the current time"))?;
         let remote_host = self.remote_host;
         let mut recieved = 0;
         self.waiting_for
@@ -143,14 +206,14 @@ impl Ping {
     pub fn on_time_event(&mut self) -> Result<Option<()>> {
         let mut time = TimeSpec::default();
         if self.time_file.read(&mut time)? < mem::size_of::<TimeSpec>() {
-            return Err(Error::from_raw_os_error(syscall::EINVAL));
+            return Err(Error::new_local("Failed to read from time file"));
         }
         self.send_ping(&time)?;
         self.check_timeouts(&time)?;
         time.tv_sec += self.interval;
-        if self.time_file.write(&time)? < mem::size_of::<TimeSpec>() {
-            return Err(Error::from_raw_os_error(syscall::EINVAL));
-        }
+        self.time_file
+            .write_all(&time)
+            .map_err(|e| Error::from_io_error(e, "Failed to write to time file"))?;
         self.is_finished()
     }
 
@@ -206,11 +269,11 @@ fn resolve_host(host: &str) -> Result<Ipv4Addr> {
         .or_else(|_| if let Some(SocketAddr::V4(addr)) = lookup_host(host)?.next() {
                      Ok(*addr.ip())
                  } else {
-                     Err(Error::from(ErrorKind::AddrNotAvailable))
+                     Err(Error::new_local("Failed to resolve remote host's IPv4 address"))
                  })
 }
 
-fn main() {
+fn run() -> Result<()> {
     let mut args = args().skip(1);
     let mut count = PING_PACKETS_TO_SEND;
     let mut interval = PING_INTERVAL_S;
@@ -220,40 +283,48 @@ fn main() {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!("{}", PING_MAN);
-                return;
+                return Ok(());
             }
             "-i" => {
-                interval = i64::from_str(&args.next().expect("no interval argument provided"))
-                    .expect("invalid interval argument");
+                interval = i64::from_str(&args.next()
+                                         .ok_or_else(|| {
+                                             Error::new_local("No argument to -i option")
+                                         })?)
+                    .map_err(|e| {
+                        Error::from_int_parse_error(e, "Invalid argument to -i option")
+                    })?;
                 if interval <= 0 {
-                    println!("invalid interval argument");
-                    process::exit(1);
+                    return Err(Error::new_local("Interval can't be less or equal to 0"));
                 }
             }
             "-c" => {
-                count = usize::from_str(&args.next().expect("no count argument provided"))
-                    .expect("invalid count argument");
+                count = usize::from_str(&args.next()
+                                        .ok_or_else(|| {
+                                            Error::new_local("No argument to -c option")
+                                        })?)
+                    .map_err(|e| {
+                        Error::from_int_parse_error(e, "Invalid argument to -c option")
+                    })?;
             }
             host => {
                 if remote_host.is_empty() {
                     remote_host = host.to_owned();
                 } else {
-                    println!("too many hosts to ping");
-                    process::exit(1);
+                    return Err(Error::new_local("Too many hosts to ping"));
                 }
             }
         }
     }
 
-    let remote_host = resolve_host(&remote_host).expect("Can't resolve the remote host");
+    let remote_host = resolve_host(&remote_host)?;
 
     let icmp_path = format!("icmp:echo/{}", remote_host);
     let echo_fd = syscall::open(&icmp_path, syscall::O_RDWR | syscall::O_NONBLOCK)
-        .expect(&format!("Can't open path {}", icmp_path));
+        .map_err(|_| Error::new_local(format!("Can't open path {}", icmp_path)))?;
 
     let time_path = format!("time:{}", syscall::CLOCK_MONOTONIC);
     let time_fd = syscall::open(&time_path, syscall::O_RDWR)
-        .expect(&format!("Can't open path {}", time_path));
+        .map_err(|_| Error::new_local(format!("Can't open path {}", time_path)))?;
 
 
     let ping = Rc::new(RefCell::new(Ping::new(remote_host,
@@ -262,26 +333,25 @@ fn main() {
                                               unsafe { File::from_raw_fd(echo_fd as RawFd) },
                                               unsafe { File::from_raw_fd(time_fd as RawFd) })));
 
-    let mut event_queue = EventQueue::<()>::new().expect("Can't create event queue");
+    let mut event_queue =
+        EventQueue::<(), Error>::new()
+            .map_err(|e| Error::from_io_error(e, "Failed to create error queue"))?;
 
     let ping_ = ping.clone();
 
     event_queue
         .add(echo_fd as RawFd,
-             move |_| ping_.borrow_mut().on_echo_event())
-        .expect("Can't wait for echo events");
+             move |_| ping_.borrow_mut().on_echo_event())?;
 
     let ping_ = ping.clone();
     event_queue
         .add(time_fd as RawFd,
-             move |_| ping_.borrow_mut().on_time_event())
-        .expect("Can't wait for time events");
+             move |_| ping_.borrow_mut().on_time_event())?;
 
     event_queue
-        .trigger_all(0)
-        .expect("Can't trigger all ping event");
+        .trigger_all(0)?;
 
-    event_queue.run().expect("Can't run even queue");
+    event_queue.run()?;
 
     let transmited = ping.borrow().get_transmitted();
     let recieved = ping.borrow().get_recieved();
@@ -290,4 +360,12 @@ fn main() {
              transmited,
              recieved,
              100 * (transmited - recieved) / transmited);
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
 }
