@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use hyper::server::{Server, Request, Response};
 use hyper::status::StatusCode;
 use hyper::uri::RequestUri::AbsolutePath;
-use hyper::header::{Headers, ContentType};
+use hyper::header::{Headers, ContentType, ContentLength};
 
 fn read_dir(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
     let mut names = vec![];
@@ -57,6 +57,7 @@ fn read_dir(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
 
     let mut headers = Headers::new();
     headers.set(ContentType("text/html".parse().unwrap()));
+    headers.set(ContentLength(response.len() as u64));
 
     Ok((headers, response.into_bytes()))
 }
@@ -80,6 +81,7 @@ fn read_file(_root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
 
     let mut headers = Headers::new();
     headers.set(ContentType(mime_type.parse().unwrap()));
+    headers.set(ContentLength(response.len() as u64));
 
     Ok((headers, response))
 }

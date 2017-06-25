@@ -5,6 +5,7 @@ use netutils::{getcfg, setcfg, MacAddr};
 use std::{env, process, time};
 use std::io::{self, Write};
 use std::net::UdpSocket;
+use std::time::Duration;
 
 use dhcp::Dhcp;
 
@@ -31,6 +32,8 @@ fn dhcp(quiet: bool) -> Result<(), String> {
 
     let socket = try_fmt!(UdpSocket::bind((current_ip.as_str(), 68)), "failed to bind udp");
     try_fmt!(socket.connect("255.255.255.255:67"), "failed to connect udp");
+    try_fmt!(socket.set_read_timeout(Some(Duration::new(5, 0))), "failed to set read timeout");
+    try_fmt!(socket.set_write_timeout(Some(Duration::new(5, 0))), "failed to set write timeout");
 
     {
         let mut discover = Dhcp {
