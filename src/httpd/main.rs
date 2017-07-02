@@ -1,12 +1,17 @@
 #![cfg_attr(not(target_os = "redox"), feature(libc))]
 
+extern crate hyper;
+
 use std::{env, str};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind, Result, Read, Write};
-use std::net::TcpListener;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use hyper::server::{Server, Request, Response};
+use hyper::status::StatusCode;
+use hyper::uri::RequestUri::AbsolutePath;
+use hyper::header::{Headers, ContentType, ContentLength};
 
-fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
+fn read_dir(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
     let mut names = vec![];
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -50,12 +55,14 @@ fn read_dir(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     }
     response.push_str("</body></html>");
 
-    let headers = format!("Content-Type: text/html\r\n").into_bytes();
+    let mut headers = Headers::new();
+    headers.set(ContentType("text/html".parse().unwrap()));
+    headers.set(ContentLength(response.len() as u64));
 
     Ok((headers, response.into_bytes()))
 }
 
-fn read_file(_root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
+fn read_file(_root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
     let mut file = File::open(path)?;
 
     let mut response = Vec::new();
@@ -72,12 +79,14 @@ fn read_file(_root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
         _ => "text/plain"
     };
 
-    let headers = format!("Content-Type: {}\r\n", mime_type).into_bytes();
+    let mut headers = Headers::new();
+    headers.set(ContentType(mime_type.parse().unwrap()));
+    headers.set(ContentLength(response.len() as u64));
 
     Ok((headers, response))
 }
 
-fn read_path(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
+fn read_path(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
     if path.is_dir() {
         let mut index_path = path.to_path_buf();
         index_path.push("index.html");
@@ -91,49 +100,43 @@ fn read_path(root: &Path, path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     }
 }
 
-fn read_req(root: &Path, request: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-    let get = request.lines().next().ok_or(Error::new(ErrorKind::InvalidInput, "Request line not found"))?;
-    let path = get.split(' ').nth(1).ok_or(Error::new(ErrorKind::InvalidInput, "Path not found"))?;
-
-    let mut full_path = root.to_path_buf();
-    full_path.push(path.trim_left_matches('/'));
-    if full_path.as_path().strip_prefix(root).is_ok() {
-        read_path(root, &full_path)
+fn read_req(root: &Path, request: &Request) -> Result<(Headers, Vec<u8>)> {
+    if let AbsolutePath(ref path) = request.uri {
+        let mut full_path = root.to_path_buf();
+        full_path.push(path.trim_left_matches('/'));
+        if full_path.as_path().strip_prefix(root).is_ok() {
+            read_path(root, &full_path)
+        } else {
+            Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"))
+        }
     } else {
-        Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"))
+        Err(Error::new(ErrorKind::InvalidInput, "Path not found"))
     }
 }
 
-fn http(root: &Path) {
-    let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
-    loop {
-        let mut stream = listener.accept().unwrap().0;
+fn http(root: PathBuf) {
+    Server::http("0.0.0.0:8080").unwrap().handle(move |req: Request, mut res: Response| {
+        match req.method {
+            hyper::Get => {
+                match read_req(&root, &req) {
+                    Ok((headers, response)) => {
+                        *res.headers_mut() = headers;
+                        res.start().unwrap().write(&response).unwrap();
+                    },
+                    Err(err) => {
+                        *res.status_mut() = match err.kind() {
+                            ErrorKind::NotFound => StatusCode::NotFound,
+                            ErrorKind::InvalidInput => StatusCode::BadRequest,
+                            _ => StatusCode::InternalServerError
+                        };
 
-        let mut data = [0; 65536];
-        let count = stream.read(&mut data).unwrap();
-
-        let request = str::from_utf8(&data[.. count]).unwrap();
-
-        let response = match read_req(root, request) {
-            Ok((mut headers, mut response)) => {
-                let mut full_response = format!("HTTP/1.1 200 OK\r\n").into_bytes();
-                full_response.append(&mut headers);
-                full_response.push(b'\r');
-                full_response.push(b'\n');
-                full_response.append(&mut response);
-                full_response
-            },
-            Err(err) => match err.kind() {
-                ErrorKind::NotFound => format!("HTTP/1.1 404 Not Found\r\n\r\n{}", err).into_bytes(),
-                ErrorKind::InvalidInput => format!("HTTP/1.1 400 Bad Request\r\n\r\n{}", err).into_bytes(),
-                _ => format!("HTTP/1.1 500 Internal Server Error\r\n\r\n{}", err).into_bytes()
+                        write!(res.start().unwrap(), "{}", err);
+                    }
+                }
             }
-        };
-
-        for chunk in response.chunks(8192) {
-            stream.write(&chunk).unwrap();
+            _ => *res.status_mut() = StatusCode::MethodNotAllowed
         }
-    }
+    }).unwrap();
 }
 
 #[cfg(target_os = "redox")]
@@ -161,9 +164,9 @@ fn main() {
     println!("HTTP: {}", root.display());
     if background {
         if fork() == 0 {
-            http(&root);
+            http(root);
         }
     } else {
-        http(&root);
+        http(root);
     }
 }
