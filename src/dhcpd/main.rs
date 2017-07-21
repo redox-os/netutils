@@ -21,9 +21,9 @@ macro_rules! try_fmt {
 }
 
 fn dhcp(quiet: bool) -> Result<(), String> {
-    let current_mac = MacAddr::from_str(&try_fmt!(getcfg("mac"), "failed to get current mac"));
+    let current_mac = MacAddr::from_str(try_fmt!(getcfg("mac"), "failed to get current mac").trim());
 
-    let current_ip = getcfg("ip").unwrap_or("0.0.0.0".to_string());
+    let current_ip = getcfg("ip").unwrap_or("0.0.0.0".to_string()).trim();
     if ! quiet {
         println!("DHCP: MAC: {} Current IP: {}", current_mac.to_string(), current_ip);
     }
@@ -144,28 +144,28 @@ fn dhcp(quiet: bool) -> Result<(), String> {
         }
 
         {
-            try_fmt!(setcfg("ip", &format!("{}.{}.{}.{}", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])), "failed to set ip");
+            try_fmt!(setcfg("ip", &format!("{}.{}.{}.{}\n", offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3])), "failed to set ip");
 
             if ! quiet {
-                let new_ip = try_fmt!(getcfg("ip"), "failed to get ip");
+                let new_ip = try_fmt!(getcfg("ip"), "failed to get ip").trim();
                 println!("DHCP: New IP: {}", new_ip);
             }
         }
 
         if let Some(subnet) = subnet_option {
-            try_fmt!(setcfg("ip_subnet", &format!("{}.{}.{}.{}", subnet[0], subnet[1], subnet[2], subnet[3])), "failed to set ip subnet");
+            try_fmt!(setcfg("ip_subnet", &format!("{}.{}.{}.{}\n", subnet[0], subnet[1], subnet[2], subnet[3])), "failed to set ip subnet");
 
             if ! quiet {
-                let new_subnet = try_fmt!(getcfg("ip_subnet"), "failed to get ip subnet");
+                let new_subnet = try_fmt!(getcfg("ip_subnet"), "failed to get ip subnet").trim();
                 println!("DHCP: New Subnet: {}", new_subnet);
             }
         }
 
         if let Some(router) = router_option {
-            try_fmt!(setcfg("ip_router", &format!("{}.{}.{}.{}", router[0], router[1], router[2], router[3])), "failed to set ip router");
+            try_fmt!(setcfg("ip_router", &format!("{}.{}.{}.{}\n", router[0], router[1], router[2], router[3])), "failed to set ip router");
 
             if ! quiet {
-                let new_router = try_fmt!(getcfg("ip_router"), "failed to get ip router");
+                let new_router = try_fmt!(getcfg("ip_router"), "failed to get ip router").trim();
                 println!("DHCP: New Router: {}", new_router);
             }
         }
@@ -180,10 +180,10 @@ fn dhcp(quiet: bool) -> Result<(), String> {
                 dns = opendns;
             }
 
-            try_fmt!(setcfg("dns", &format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3])), "failed to set dns");
+            try_fmt!(setcfg("dns", &format!("{}.{}.{}.{}\n", dns[0], dns[1], dns[2], dns[3])), "failed to set dns");
 
             if ! quiet {
-                let new_dns = try_fmt!(getcfg("dns"), "failed to get dns");
+                let new_dns = try_fmt!(getcfg("dns"), "failed to get dns").trim();
                 println!("DHCP: New DNS: {}", new_dns);
             }
         }
