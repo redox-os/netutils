@@ -43,12 +43,17 @@ path = "src/wget/main.rs"
 name = "ping"
 path = "src/ping/main.rs"
 
+[[bin]]
+name = "hyperd"
+path = "src/hyperd/main.rs"
+
 [dependencies]
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_syscall = "0.1"
 termion = "1.0"
 hyper-rustls = "0.6"
 redox_event = { git = "https://github.com/redox-os/event.git" }
+spin = "0.4"
 
 [dependencies.hyper]
 version = "0.10"
