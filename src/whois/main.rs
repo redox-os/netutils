@@ -59,7 +59,7 @@ fn main() {
         fail("Query is empty", &mut stderr);
     }
 
-    // Remember previous hosts to prevent an infinte loop
+    // Remember previous hosts to prevent an infinite loop
     let mut previous_hosts = Vec::with_capacity(1);
     while host != "" {
         let mut nhost = "".to_string();
