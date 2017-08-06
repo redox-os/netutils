@@ -53,6 +53,7 @@ ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_event = { git = "https://github.com/redox-os/event.git" }
 redox_syscall = "0.1"
 termion = { git = "https://github.com/redox-os/termion.git", branch = "redox_termios" }
+arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
 
 [dependencies.hyper]
 version = "0.10"

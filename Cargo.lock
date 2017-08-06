@@ -2,6 +2,7 @@
 name = "netutils"
 version = "0.1.0"
 dependencies = [
+ "arg_parser 0.1.0 (git+https://github.com/redox-os/arg-parser.git)",
  "hyper 0.10.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-rustls 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.29 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -10,6 +11,11 @@ dependencies = [
  "redox_syscall 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.0 (git+https://github.com/redox-os/termion.git?branch=redox_termios)",
 ]
+
+[[package]]
+name = "arg_parser"
+version = "0.1.0"
+source = "git+https://github.com/redox-os/arg-parser.git#ed88287e60b2e1de2e67a2f8b32ffda242127277"
 
 [[package]]
 name = "base64"
@@ -392,6 +398,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum arg_parser 0.1.0 (git+https://github.com/redox-os/arg-parser.git)" = "<none>"
 "checksum base64 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "30e93c03064e7590d0466209155251b90c22e37fab1daf2771582598b5827557"
 "checksum base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "96434f987501f0ed4eb336a411e0631ecd1afa11574fe148587adc4ff96143c9"
 "checksum bitflags 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "aad18937a628ec6abcd26d1489012cc0e18c21798210f491af69ded9b881106d"
