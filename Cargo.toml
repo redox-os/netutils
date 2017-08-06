@@ -40,6 +40,10 @@ name = "wget"
 path = "src/wget/main.rs"
 
 [[bin]]
+name = "whois"
+path = "src/whois/main.rs"
+
+[[bin]]
 name = "ping"
 path = "src/ping/main.rs"
 
