@@ -1,71 +1,65 @@
 #![feature(ascii_ctype)]
 
+extern crate extra;
+extern crate arg_parser;
+
+use extra::io::fail;
 use std::process::exit;
-use std::env::{args, Args};
-use std::iter::Skip;
 use std::error::Error;
 use std::net::TcpStream;
 use std::io::{Write, BufRead, BufReader};
 use std::ascii::AsciiExt;
 
-/* Some portion of this code is dedicated to parsing the arguments. This can easily be improved
- * if we can use ArgParser, but ArgParser has to be moved first to redox/libextra. See
- * https://github.com/redox-os/redox/issues/923 */
-
-/* Print an error message and exit. Panicking instead won't print a nice output. This isn't a nice
- * solution and would be solved by using the feature in RFC 1937. See
- * https://github.com/rust-lang/rust/issues/43301 */
-fn fatal_error(msg: String) {
-    eprintln!("{}", msg);
-    exit(1);
-}
-
-macro_rules! fatal_error {
-    ($($arg:expr),*) => {fatal_error(format!($($arg),*))}
-}
-
-/* Store the next argument in var and fatally exit if there isn't any. If we can use ArgParser, this
- * needs to be removed. */
-fn next_required_arg<T>(args: &mut Skip<Args>, option_str: &str, func: T)
-where
-    T: FnOnce(String),
-{
-    match args.next() {
-        Some(s) => func(s),
-        None => fatal_error!("option '{}' requires an argument", option_str),
-    }
-}
-
 fn main() {
+    // Setup stderr stream in case of failure. Required by extra::io::fail
+    let mut stderr = std::io::stderr();
+
     // Set defaults
     let mut host = "whois.iana.org".to_string();
     let mut port: u16 = 43;
     let query: String;
 
-    // Parse the arguments. This needs to change if we can use ArgParser.
+    // Parse the arguments.
     {
-        let mut query_vec = Vec::with_capacity(1);
-        let mut args = args().skip(1);
-        while let Some(arg) = args.next() {
-            match arg.as_str(){
-                "--help" => {
-                    println!("Usage: whois [-h hostname] [-p port] query");
-                    exit(0);
+        let mut parser = arg_parser::ArgParser::new(3)
+            .add_flag(&["", "help"])
+            .add_opt("h", "host")
+            .add_opt("p", "port");
+
+        parser.parse(std::env::args());
+
+        if parser.found("help") {
+            println!("Usage: whois [(-h | --host) hostname] [(-p | --port) port] query");
+            exit(0);
+        }
+
+        let hostname = parser.get_opt("host").unwrap();
+        if !hostname.is_empty() {
+            // For easier case insenstive comparisons, lowercase the host.
+            host = hostname.to_ascii_lowercase();
+        }
+
+        let port_string = parser.get_opt("port").unwrap();
+        if !port_string.is_empty() {
+            match port_string.parse::<u16>() {
+                Ok(num) => port = num,
+                Err(e) => {
+                    fail(
+                        format!("failed to parse '{}', {}", port_string, e.description()).as_str(),
+                        &mut stderr,
+                    )
                 }
-                "-h" => // For easier case insenstive comparisons, lowercase the host.
-                    next_required_arg(&mut args, "-h", |s| host = s.to_ascii_lowercase()),
-                "-p" =>
-                    next_required_arg(&mut args, "-p", |s| match s.parse::<u16>(){
-                        Ok(num) => port = num,
-                        Err(e) => fatal_error!("failed to parse '{}', {}", s, e.description())
-                    }),
-                _ => query_vec.push(arg)
             }
         }
-        query = query_vec.join(" ");
+
+        query = parser.args.join(" ")
     }
 
-    // Remember previous hosts to prevent an infinte loop
+    if query.is_empty() {
+        fail("Query is empty", &mut stderr);
+    }
+
+    // Remember previous hosts to prevent an infinite loop
     let mut previous_hosts = Vec::with_capacity(1);
     while host != "" {
         let mut nhost = "".to_string();
@@ -75,7 +69,10 @@ fn main() {
             Ok(mut stream) => {
                 // Send the query. A curfeed and a newline are required by the WHOIS standard.
                 if let Err(e) = write!(stream, "{}\r\n", query) {
-                    fatal_error!("Error sending to {}, {}", host, e.description());
+                    fail(
+                        format!("Can't send to {}, {}", host, e.description()).as_str(),
+                        &mut stderr,
+                    );
                 }
 
                 /* Read the response and determine if it's a thick or a thin client. Unfortunately,
@@ -113,10 +110,13 @@ fn main() {
                                             &mut std::io::stdout(),
                                         )
                                         {
-                                            fatal_error!(
-                                                "Error printing whois data from {}, {}",
-                                                host,
-                                                e.description()
+                                            fail(
+                                                format!(
+                                                    "Can't print whois data from {}, {}",
+                                                    host,
+                                                    e.description()
+                                                ).as_str(),
+                                                &mut stderr,
                                             );
                                         }
                                         break 'line_reading;
@@ -125,12 +125,22 @@ fn main() {
                                 }
                             }
                         }
-                        Err(e) => fatal_error!("Error reading from {}, {}", host, e.description()),
+                        Err(e) => {
+                            fail(
+                                format!("Can't read from {}, {}", host, e.description()).as_str(),
+                                &mut stderr,
+                            )
+                        }
                     }
                     line.clear();
                 }
             }
-            Err(e) => fatal_error!("Failed to connect to {}, {}", host, e.description()),
+            Err(e) => {
+                fail(
+                    format!("Failed to connect to '{}', {}", host, e.description()).as_str(),
+                    &mut stderr,
+                )
+            }
         }
 
         // Ignore and don't report an error for self-referrals
@@ -142,10 +152,13 @@ fn main() {
         {
             let mut previous_hosts_iter = previous_hosts.iter();
             if let Some(_) = previous_hosts_iter.position(|s| *s == nhost) {
-                fatal_error!(
-                    "Error: Detected whois referral loop between hosts:\n{}\n{}",
-                    nhost,
-                    previous_hosts_iter.as_slice().join("\n")
+                fail(
+                    format!(
+                        "Detected whois referral loop between hosts:\n{}\n{}",
+                        nhost,
+                        previous_hosts_iter.as_slice().join("\n")
+                    ).as_str(),
+                    &mut stderr,
                 );
             }
         }
