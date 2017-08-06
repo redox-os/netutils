@@ -1,26 +1,19 @@
 #![feature(ascii_ctype)]
 
+extern crate extra;
 extern crate arg_parser;
 
+use extra::io::fail;
 use std::process::exit;
 use std::error::Error;
 use std::net::TcpStream;
 use std::io::{Write, BufRead, BufReader};
 use std::ascii::AsciiExt;
 
-/* Print an error message and exit. Panicking instead won't print a nice output. This isn't a nice
- * solution and would be solved by using the feature in RFC 1937. See
- * https://github.com/rust-lang/rust/issues/43301 */
-fn fatal_error(msg: String) {
-    eprintln!("{}", msg);
-    exit(1);
-}
-
-macro_rules! fatal_error {
-    ($($arg:expr),*) => {fatal_error(format!($($arg),*))}
-}
-
 fn main() {
+    // Setup stderr stream in case of failure. Required by extra::io::fail
+    let mut stderr = std::io::stderr();
+
     // Set defaults
     let mut host = "whois.iana.org".to_string();
     let mut port: u16 = 43;
@@ -50,7 +43,12 @@ fn main() {
         if !port_string.is_empty() {
             match port_string.parse::<u16>() {
                 Ok(num) => port = num,
-                Err(e) => fatal_error!("failed to parse '{}', {}", port_string, e.description()),
+                Err(e) => {
+                    fail(
+                        format!("failed to parse '{}', {}", port_string, e.description()).as_str(),
+                        &mut stderr,
+                    )
+                }
             }
         }
 
@@ -58,7 +56,7 @@ fn main() {
     }
 
     if query.is_empty() {
-        fatal_error!("Query is empty");
+        fail("Query is empty", &mut stderr);
     }
 
     // Remember previous hosts to prevent an infinte loop
@@ -71,7 +69,10 @@ fn main() {
             Ok(mut stream) => {
                 // Send the query. A curfeed and a newline are required by the WHOIS standard.
                 if let Err(e) = write!(stream, "{}\r\n", query) {
-                    fatal_error!("Error sending to {}, {}", host, e.description());
+                    fail(
+                        format!("Can't send to {}, {}", host, e.description()).as_str(),
+                        &mut stderr,
+                    );
                 }
 
                 /* Read the response and determine if it's a thick or a thin client. Unfortunately,
@@ -109,10 +110,13 @@ fn main() {
                                             &mut std::io::stdout(),
                                         )
                                         {
-                                            fatal_error!(
-                                                "Error printing whois data from {}, {}",
-                                                host,
-                                                e.description()
+                                            fail(
+                                                format!(
+                                                    "Can't print whois data from {}, {}",
+                                                    host,
+                                                    e.description()
+                                                ).as_str(),
+                                                &mut stderr,
                                             );
                                         }
                                         break 'line_reading;
@@ -121,12 +125,22 @@ fn main() {
                                 }
                             }
                         }
-                        Err(e) => fatal_error!("Error reading from {}, {}", host, e.description()),
+                        Err(e) => {
+                            fail(
+                                format!("Can't read from {}, {}", host, e.description()).as_str(),
+                                &mut stderr,
+                            )
+                        }
                     }
                     line.clear();
                 }
             }
-            Err(e) => fatal_error!("Failed to connect to {}, {}", host, e.description()),
+            Err(e) => {
+                fail(
+                    format!("Failed to connect to '{}', {}", host, e.description()).as_str(),
+                    &mut stderr,
+                )
+            }
         }
 
         // Ignore and don't report an error for self-referrals
@@ -138,10 +152,13 @@ fn main() {
         {
             let mut previous_hosts_iter = previous_hosts.iter();
             if let Some(_) = previous_hosts_iter.position(|s| *s == nhost) {
-                fatal_error!(
-                    "Error: Detected whois referral loop between hosts:\n{}\n{}",
-                    nhost,
-                    previous_hosts_iter.as_slice().join("\n")
+                fail(
+                    format!(
+                        "Detected whois referral loop between hosts:\n{}\n{}",
+                        nhost,
+                        previous_hosts_iter.as_slice().join("\n")
+                    ).as_str(),
+                    &mut stderr,
                 );
             }
         }
