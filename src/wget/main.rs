@@ -1,5 +1,6 @@
 #![deny(warnings)]
 
+extern crate arg_parser;
 extern crate hyper;
 extern crate hyper_rustls;
 
@@ -12,6 +13,7 @@ use hyper::Client;
 use hyper::net::HttpsConnector;
 use hyper::header::ContentLength;
 use hyper::status::StatusCode;
+use arg_parser::ArgParser;
 
 fn wget<W: Write>(url: &str, mut output: W) {
     let mut stderr = stderr();
@@ -91,9 +93,12 @@ fn wget<W: Write>(url: &str, mut output: W) {
 }
 
 fn main() {
-    let mut args = env::args().skip(1);
-    match args.next() {
-        Some(url) => match args.next() {
+    let mut parser = ArgParser::new(1)
+        .add_opt("O", "output-document");
+    parser.parse(env::args());
+
+    match parser.args.get(0) {
+        Some(url) => match parser.get_opt("output-document") {
             Some(path) => match File::create(&path) {
                 Ok(mut file) => {
                     wget(&url, &mut file);
@@ -112,7 +117,7 @@ fn main() {
             }
         },
         None => {
-            writeln!(stderr(), "wget http://host:port/path [output]").unwrap();
+            writeln!(stderr(), "wget http://host:port/path [-O output]").unwrap();
             process::exit(1);
         }
     }
