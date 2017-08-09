@@ -33,14 +33,12 @@ fn main() {
             exit(0);
         }
 
-        let hostname = parser.get_opt("host").unwrap();
-        if !hostname.is_empty() {
+        if let Some(hostname) = parser.get_opt("host") {
             // For easier case insenstive comparisons, lowercase the host.
             host = hostname.to_ascii_lowercase();
         }
 
-        let port_string = parser.get_opt("port").unwrap();
-        if !port_string.is_empty() {
+        if let Some(port_string) = parser.get_opt("port") {
             match port_string.parse::<u16>() {
                 Ok(num) => port = num,
                 Err(e) => {
