@@ -16,7 +16,7 @@ dependencies = [
 [[package]]
 name = "arg_parser"
 version = "0.1.0"
-source = "git+https://github.com/redox-os/arg-parser.git#ed88287e60b2e1de2e67a2f8b32ffda242127277"
+source = "git+https://github.com/redox-os/arg-parser.git#1b6a9505a1e9c39af1836ecbee293a987619a539"
 
 [[package]]
 name = "base64"
