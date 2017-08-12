@@ -3,10 +3,11 @@
 extern crate arg_parser;
 extern crate hyper;
 extern crate hyper_rustls;
+extern crate pbr;
 
 use std::env;
 use std::fs::File;
-use std::io::{stderr, stdout, Read, Write};
+use std::io::{self, Read, Write};
 use std::process;
 use std::time::Duration;
 use hyper::Client;
@@ -14,9 +15,10 @@ use hyper::net::HttpsConnector;
 use hyper::header::ContentLength;
 use hyper::status::StatusCode;
 use arg_parser::ArgParser;
+use pbr::{ProgressBar, Units};
 
 fn wget<W: Write>(url: &str, mut output: W) {
-    let mut stderr = stderr();
+    let mut stderr = io::stderr();
 
     let mut client = Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
     client.set_read_timeout(Some(Duration::new(5, 0)));
@@ -27,38 +29,9 @@ fn wget<W: Write>(url: &str, mut output: W) {
                 let mut count = 0;
                 let length = response.headers.get::<ContentLength>().map_or(0, |h| h.0 as usize);
 
-                let mut status = [b' '; 50];
-
+                let mut pb = ProgressBar::on(io::stderr(), length as u64);
+                pb.set_units(Units::Bytes);
                 loop {
-                    let (percent, cols) = if count >= length {
-                        (100, status.len())
-                    } else {
-                        ((100 * count) / length, (status.len() * count) / length)
-                    };
-
-                    let _ = write!(stderr, "\r* {:>3}% [", percent);
-
-                    for i in 0..cols {
-                        status[i] = b'=';
-                    }
-                    if cols < status.len() {
-                        status[cols] = b'>';
-                    }
-
-                    let _ = stderr.write(&status);
-
-                    let (size, suffix) = if count >= 10 * 1000 * 1000 * 1000 {
-                        (count / (1000 * 1000 * 1000), "GB")
-                    } else if count >= 10 * 1000 * 1000 {
-                        (count / (1000 * 1000), "MB")
-                    } else if count >= 10 * 1000 {
-                        (count / 1000, "KB")
-                    } else {
-                        (count, "B")
-                    };
-
-                    let _ = write!(stderr, "] {:>4} {}", size, suffix);
-
                     let mut buf = [0; 8192];
                     let res = match response.read(&mut buf) {
                         Ok(res) => res,
@@ -77,8 +50,8 @@ fn wget<W: Write>(url: &str, mut output: W) {
                             process::exit(1);
                         }
                     };
+                    pb.set(count as u64);
                 }
-                let _ = write!(stderr, "\n");
             },
             _ => {
                 let _ = writeln!(stderr, "wget: failed to receive request: {}", response.status);
@@ -103,21 +76,21 @@ fn main() {
                 Ok(mut file) => {
                     wget(&url, &mut file);
                     if let Err(err) = file.sync_all() {
-                        let _ = writeln!(stderr(), "wget: failed to sync data: {}", err);
+                        let _ = writeln!(io::stderr(), "wget: failed to sync data: {}", err);
                         process::exit(1);
                     }
                 },
                 Err(err) => {
-                    writeln!(stderr(), "wget: failed to create '{}': {}", path, err).unwrap();
+                    writeln!(io::stderr(), "wget: failed to create '{}': {}", path, err).unwrap();
                     process::exit(1);
                 }
             },
             None => {
-                wget(&url, stdout());
+                wget(&url, io::stdout());
             }
         },
         None => {
-            writeln!(stderr(), "wget http://host:port/path [-O output]").unwrap();
+            writeln!(io::stderr(), "wget http://host:port/path [-O output]").unwrap();
             process::exit(1);
         }
     }
