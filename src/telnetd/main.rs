@@ -8,7 +8,7 @@ extern crate libc;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
-use std::{env, str};
+use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Result, Read, Write};
