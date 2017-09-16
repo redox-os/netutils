@@ -1,5 +1,3 @@
-#![feature(associated_consts)]
-
 use std::fs::File;
 use std::io::{Result, Read, Write};
 use std::{mem, slice, u8, u16};

@@ -1,15 +1,18 @@
 #![cfg_attr(not(target_os = "redox"), feature(libc))]
 
 extern crate hyper;
+extern crate futures;
 
-use std::{env, str};
+use futures::future::FutureResult;
+
+use hyper::{Method, StatusCode};
+use hyper::header::{ContentLength, ContentType, Headers};
+use hyper::server::{Http, Service, Request, Response};
+
+use std::env;
 use std::fs::{self, File};
-use std::io::{Error, ErrorKind, Result, Read, Write};
+use std::io::{Error, ErrorKind, Result, Read};
 use std::path::{Path, PathBuf};
-use hyper::server::{Server, Request, Response};
-use hyper::status::StatusCode;
-use hyper::uri::RequestUri::AbsolutePath;
-use hyper::header::{Headers, ContentType, ContentLength};
 
 fn read_dir(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
     let mut names = vec![];
@@ -101,42 +104,60 @@ fn read_path(root: &Path, path: &Path) -> Result<(Headers, Vec<u8>)> {
 }
 
 fn read_req(root: &Path, request: &Request) -> Result<(Headers, Vec<u8>)> {
-    if let AbsolutePath(ref path) = request.uri {
-        let mut full_path = root.to_path_buf();
-        full_path.push(path.trim_left_matches('/'));
-        if full_path.as_path().strip_prefix(root).is_ok() {
-            read_path(root, &full_path)
-        } else {
-            Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"))
-        }
+    let uri = request.uri();
+    let path = uri.path();
+    let mut full_path = root.to_path_buf();
+    full_path.push(path.trim_left_matches('/'));
+    if full_path.as_path().strip_prefix(root).is_ok() {
+        read_path(root, &full_path)
     } else {
-        Err(Error::new(ErrorKind::InvalidInput, "Path not found"))
+        Err(Error::new(ErrorKind::InvalidInput, "Path is invalid"))
+    }
+}
+
+struct Httpd {
+    root: PathBuf
+}
+
+impl Service for Httpd {
+    type Request = Request;
+    type Response = Response;
+    type Error = hyper::Error;
+    type Future = FutureResult<Response, hyper::Error>;
+    fn call(&self, req: Request) -> Self::Future {
+        let res = match *req.method() {
+            Method::Get => {
+                match read_req(&self.root, &req) {
+                    Ok((headers, response)) => {
+                        Response::new()
+                            .with_headers(headers)
+                            .with_body(response)
+                    },
+                    Err(err) => {
+                        Response::new()
+                            .with_status(match err.kind() {
+                                ErrorKind::NotFound => StatusCode::NotFound,
+                                ErrorKind::InvalidInput => StatusCode::BadRequest,
+                                _ => StatusCode::InternalServerError
+                            })
+                            .with_body(format!("{}", err))
+                    }
+                }
+            }
+            _ => {
+                Response::new()
+                    .with_status(StatusCode::MethodNotAllowed)
+            }
+        };
+
+        futures::future::ok(res)
     }
 }
 
 fn http(root: PathBuf) {
-    Server::http("0.0.0.0:8080").unwrap().handle(move |req: Request, mut res: Response| {
-        match req.method {
-            hyper::Get => {
-                match read_req(&root, &req) {
-                    Ok((headers, response)) => {
-                        *res.headers_mut() = headers;
-                        res.start().unwrap().write(&response).unwrap();
-                    },
-                    Err(err) => {
-                        *res.status_mut() = match err.kind() {
-                            ErrorKind::NotFound => StatusCode::NotFound,
-                            ErrorKind::InvalidInput => StatusCode::BadRequest,
-                            _ => StatusCode::InternalServerError
-                        };
-
-                        write!(res.start().unwrap(), "{}", err);
-                    }
-                }
-            }
-            _ => *res.status_mut() = StatusCode::MethodNotAllowed
-        }
-    }).unwrap();
+    let addr = "0.0.0.0:8080".parse().unwrap();
+    let server = Http::new().bind(&addr, move || Ok(Httpd { root: root.clone() })).unwrap();
+    server.run().unwrap();
 }
 
 #[cfg(target_os = "redox")]

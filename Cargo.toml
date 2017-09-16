@@ -48,18 +48,24 @@ name = "ping"
 path = "src/ping/main.rs"
 
 [dependencies]
-hyper-rustls = "0.6"
+arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
+extra = { git = "https://github.com/redox-os/libextra.git"}
+futures = "0.1"
+hyper-rustls = "0.11"
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
+pbr = { git = "https://github.com/a8m/pb" }
 redox_event = { git = "https://github.com/redox-os/event.git" }
 redox_syscall = "0.1"
 termion = "1.5.1"
-arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
-extra = { git = "https://github.com/redox-os/libextra.git"}
-pbr = { git = "https://github.com/a8m/pb" }
+tokio-core = "0.1.7"
 
 [dependencies.hyper]
-version = "0.10"
+version = "0.11"
 default-features = false
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 libc = "0.2"
+
+[replace]
+"iovec:0.1.0" = { git = "https://github.com/redox-os/iovec.git" }
+"mio:0.6.10" = { git = "https://github.com/redox-os/mio.git" }
