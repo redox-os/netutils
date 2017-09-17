@@ -18,6 +18,7 @@ pub struct UdpHeader {
 }
 
 /// UDP datagram for IPv4 stack consisting of header and data section
+#[derive(Debug)]
 pub struct Udp {
     pub header: UdpHeader,
     pub data: Vec<u8>,
