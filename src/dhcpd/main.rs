@@ -30,8 +30,8 @@ fn dhcp(quiet: bool) -> Result<(), String> {
 
     let tid = try_fmt!(time::SystemTime::now().duration_since(time::UNIX_EPOCH), "failed to get time").subsec_nanos();
 
-    let socket = try_fmt!(UdpSocket::bind((current_ip.trim(), 68)), "failed to bind udp");
-    try_fmt!(socket.connect("255.255.255.255:67"), "failed to connect udp");
+    let socket = try_fmt!(UdpSocket::bind(("0.0.0.0", 68)), "failed to bind udp");
+    try_fmt!(socket.connect(("255.255.255.255", 67)), "failed to connect udp");
     try_fmt!(socket.set_read_timeout(Some(Duration::new(5, 0))), "failed to set read timeout");
     try_fmt!(socket.set_write_timeout(Some(Duration::new(5, 0))), "failed to set write timeout");
 
