@@ -1,5 +1,3 @@
-#![feature(lookup_host)]
-
 extern crate syscall;
 extern crate event;
 
@@ -11,7 +9,7 @@ use std::io::{Read, Write};
 use std::io::Error as IOError;
 use std::num::ParseIntError;
 use std::mem;
-use std::net::{Ipv4Addr, SocketAddr, lookup_host};
+use std::net::{IpAddr, ToSocketAddrs};
 use std::ops::{DerefMut, Deref};
 use std::os::unix::io::{RawFd, FromRawFd};
 use std::process;
@@ -135,7 +133,7 @@ impl DerefMut for EchoPayload {
 }
 
 struct Ping {
-    remote_host: Ipv4Addr,
+    remote_host: IpAddr,
     time_file: File,
     echo_file: File,
     seq: usize,
@@ -152,7 +150,7 @@ fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
 }
 
 impl Ping {
-    pub fn new(remote_host: Ipv4Addr,
+    pub fn new(remote_host: IpAddr,
                packets_to_send: usize,
                interval: i64,
                echo_file: File,
@@ -264,13 +262,11 @@ impl Ping {
     }
 }
 
-fn resolve_host(host: &str) -> Result<Ipv4Addr> {
-    Ipv4Addr::from_str(host)
-        .or_else(|_| if let Some(SocketAddr::V4(addr)) = lookup_host(host)?.next() {
-                     Ok(*addr.ip())
-                 } else {
-                     Err(Error::new_local("Failed to resolve remote host's IPv4 address"))
-                 })
+fn resolve_host(host: &str) -> Result<IpAddr> {
+    match (host, 0).to_socket_addrs()?.next() {
+        Some(addr) => Ok(addr.ip()),
+        None => Err(Error::new_local("Failed to resolve remote host's IP address"))
+    }
 }
 
 fn run() -> Result<()> {
