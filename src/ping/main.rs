@@ -344,8 +344,10 @@ fn run() -> Result<()> {
         .add(time_fd as RawFd,
              move |_| ping_.borrow_mut().on_time_event())?;
 
-    event_queue
-        .trigger_all(0)?;
+    event_queue.trigger_all(event::Event {
+        fd: 0,
+        flags: 0,
+    })?;
 
     event_queue.run()?;
 
