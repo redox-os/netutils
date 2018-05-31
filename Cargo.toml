@@ -48,18 +48,18 @@ name = "ping"
 path = "src/ping/main.rs"
 
 [dependencies]
-arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
-extra = { git = "https://github.com/redox-os/libextra.git"}
+hyper-rustls = "0.6"
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
-pbr = { git = "https://github.com/a8m/pb" }
 redox_event = { git = "https://github.com/redox-os/event.git" }
 redox_syscall = "0.1"
-reqwest = { git = "https://github.com/redox-os/reqwest" }
 termion = "1.5.1"
+arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
+extra = { git = "https://github.com/redox-os/libextra.git"}
+pbr = { git = "https://github.com/a8m/pb" }
 
 [dependencies.hyper]
-git = "https://github.com/redox-os/hyper"
-branch = "old"
+version = "0.10"
+default-features = false
 
 [dependencies.mio]
 git = "https://github.com/redox-os/mio"
