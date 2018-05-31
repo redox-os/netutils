@@ -1,4 +1,4 @@
-//#![deny(warnings)]
+#![deny(warnings)]
 #![feature(asm)]
 #![feature(const_fn)]
 
