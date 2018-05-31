@@ -1,4 +1,4 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 #![feature(asm)]
 #![feature(const_fn)]
 
@@ -11,6 +11,8 @@ extern crate libc;
 
 #[cfg(target_os = "redox")]
 extern crate syscall;
+#[cfg(target_os = "redox")]
+extern crate redox_termios;
 
 use mio::unix::OwnedEventedFd;
 use std::env;
@@ -24,6 +26,7 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio_reactor::PollEvented;
+use redox_termios::Winsize;
 
 use getpty::getpty;
 
@@ -54,6 +57,17 @@ fn handle(stream: TcpStream, master_fd: RawFd, process: Child) {
             ws_ypixel: 0
         };
         libc::ioctl(master_fd, libc::TIOCSWINSZ, &size as *const libc::winsize);
+    }
+    #[cfg(target_os = "redox")]
+    {
+        let winsize = syscall::dup(master_fd, b"winsize").expect("failed to get winsize property");
+        let size = Winsize {
+            ws_row: 30,
+            ws_col: 80
+        };
+        let ret = syscall::write(winsize, &size);
+        syscall::close(winsize).expect("failed to close winsize property");
+        ret.expect("failed to set winsize property");
     }
 
     let master = PollEvented::new(OwnedEventedFd(unsafe { File::from_raw_fd(master_fd) }));

@@ -315,6 +315,7 @@ dependencies = [
  "pbr 1.0.1 (git+https://github.com/a8m/pb)",
  "redox_event 0.1.0 (git+https://github.com/redox-os/event.git)",
  "redox_syscall 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.6 (git+https://github.com/redox-os/tokio?branch=owned-eventedfd)",
  "tokio-reactor 0.1.1 (git+https://github.com/redox-os/tokio?branch=owned-eventedfd)",
