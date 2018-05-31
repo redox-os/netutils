@@ -1,6 +1,10 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 #![feature(asm)]
 #![feature(const_fn)]
+
+extern crate mio;
+extern crate tokio;
+extern crate tokio_reactor;
 
 #[cfg(not(target_os = "redox"))]
 extern crate libc;
@@ -8,15 +12,18 @@ extern crate libc;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
+use mio::unix::OwnedEventedFd;
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{self, ErrorKind, Result, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::io::{self, Result, Write};
 use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
-use std::thread;
+use std::process::{Command, Child, Stdio};
+use std::sync::{Arc, Mutex};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::prelude::*;
+use tokio_reactor::PollEvented;
 
 use getpty::getpty;
 
@@ -37,70 +44,8 @@ pub fn before_exec() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "redox")]
-fn handle(stream: &mut TcpStream, master_fd: RawFd) {
-    extern crate syscall;
-
-    use std::os::unix::io::AsRawFd;
-
-    let mut event_file = File::open("event:").expect("telnetd: failed to open event file");
-
-    let stream_fd = stream.as_raw_fd();
-    syscall::fevent(stream_fd, syscall::flag::EVENT_READ).expect("telnetd: failed to fevent console window");
-
-    let mut master = unsafe { File::from_raw_fd(master_fd) };
-    syscall::fevent(master_fd, syscall::flag::EVENT_READ).expect("telnetd: failed to fevent master PTY");
-
-    let mut handle_event = |event_id: usize, event_count: usize| -> bool {
-        if event_id == stream_fd {
-            let mut inbound = [0; 4096];
-            match stream.read(&mut inbound) {
-                Ok(count) => if count == 0 {
-                    return false;
-                } else {
-                    master.write(&inbound[..count]).expect("telnetd: failed to write to pty");
-                    master.flush().expect("telnetd: failed to flush pty");
-                },
-                Err(err) => match err.kind() {
-                    ErrorKind::WouldBlock => (),
-                    _ => panic!("telnetd: failed to read stream: {:?}", err)
-                }
-            }
-        } else if event_id == master_fd {
-            let mut outbound = [0; 4096];
-            let count = master.read(&mut outbound).expect("telnetd: failed to read master PTY");
-            if count == 0 {
-                if event_count == 0 {
-                    return false;
-                }
-            } else {
-                stream.write(&outbound[1..count]).expect("telnetd: failed to write to stream");
-                stream.flush().expect("telnetd: failed to flush stream");
-            }
-        } else {
-            println!("Unknown event {}", event_id);
-        }
-
-        true
-    };
-
-    handle_event(stream_fd, 0);
-    handle_event(master_fd, 0);
-
-    'events: loop {
-        let mut sys_event = syscall::Event::default();
-        event_file.read(&mut sys_event).expect("telnetd: failed to read event file");
-        if ! handle_event(sys_event.id, sys_event.data) {
-            break 'events;
-        }
-    }
-}
-
-#[cfg(not(target_os = "redox"))]
-fn handle(stream: &mut TcpStream, master_fd: RawFd) {
-    use libc;
-    use std::time::Duration;
-
+fn handle(stream: TcpStream, master_fd: RawFd, process: Child) {
+    #[cfg(not(target_os = "redox"))]
     unsafe {
         let size = libc::winsize {
             ws_row: 30,
@@ -111,50 +56,39 @@ fn handle(stream: &mut TcpStream, master_fd: RawFd) {
         libc::ioctl(master_fd, libc::TIOCSWINSZ, &size as *const libc::winsize);
     }
 
-    let mut master = unsafe { File::from_raw_fd(master_fd) };
+    let master = PollEvented::new(OwnedEventedFd(unsafe { File::from_raw_fd(master_fd) }));
 
-    loop {
-        let mut inbound = [0; 4096];
-        match stream.read(&mut inbound) {
-            Ok(count) => if count == 0 {
-                return;
-            } else {
-                master.write(&inbound[..count]).expect("telnetd: failed to write to pty");
-                master.flush().expect("telnetd: failed to flush pty");
-            },
-            Err(err) => match err.kind() {
-                ErrorKind::WouldBlock => (),
-                _ => panic!("telnetd: failed to read stream: {:?}", err)
-            }
-        }
+    let (stream_read, stream_write) = stream.split();
+    let (master_read, master_write) = master.split();
 
-        let mut outbound = [0; 4096];
-        match master.read(&mut outbound) {
-            Ok(count) => if count == 0 {
-                return;
-            } else {
-                stream.write(&outbound[1..count]).expect("telnetd: failed to write to stream");
-                stream.flush().expect("telnetd: failed to flush stream");
-            },
-            Err(err) => match err.kind() {
-                ErrorKind::WouldBlock => (),
-                _ => panic!("telnetd: failed to read master PTY: {:?}", err)
-            }
-        }
+    let process = Arc::new(Mutex::new(process));
+    let process2 = Arc::clone(&process);
 
-        thread::sleep(Duration::new(0, 100));
-    }
+    tokio::spawn(
+        tokio::io::copy(stream_read, master_write)
+            .map(|_| ())
+            .select(tokio::io::copy(master_read, stream_write)
+                .map(|_| ()))
+            .map(move |_| {
+                let mut process = process.lock().unwrap();
+                process.kill().expect("failed to kill child process");
+                process.wait().expect("failed to wait for child process");
+            })
+            .map_err(move |err| {
+                eprintln!("error reading stream: {}", err.0);
+                let mut process = process2.lock().unwrap();
+                process.kill().expect("failed to kill child process");
+                process.wait().expect("failed to wait for child process");
+            }));
 }
 
 fn telnet() {
-    let listener = TcpListener::bind("0.0.0.0:8023").unwrap();
-    loop {
-        let (mut stream, address) = listener.accept().unwrap();
-        thread::spawn(move || {
-            println!("Connection from {} opened", address);
+    let addr = "0.0.0.0:8023".parse().unwrap();
+    let listener = TcpListener::bind(&addr).unwrap();
 
-            stream.set_nonblocking(true).expect("telnetd: failed to set nonblocking");
-
+    tokio::run(listener.incoming()
+        .map_err(|err| eprintln!("accept error: {}", err))
+        .for_each(|stream| {
             let (master_fd, tty_path) = getpty();
 
             let slave_stdin = OpenOptions::new().read(true).write(true).open(&tty_path).unwrap();
@@ -177,13 +111,8 @@ fn telnet() {
                     })
                     .spawn()
             } {
-                Ok(mut process) => {
-                    handle(&mut stream, master_fd);
-
-                    let _ = process.kill();
-                    process.wait().expect("telnetd: failed to wait on shell");
-
-                    println!("Connection from {} closed", address);
+                Ok(process) => {
+                    handle(stream, master_fd, process);
                 },
                 Err(err) => {
                     let term_stderr = io::stderr();
@@ -193,8 +122,9 @@ fn telnet() {
                     let _ = term_stderr.write(b"\n");
                 }
             }
-        });
-    }
+
+            Ok(())
+        }));
 }
 
 #[cfg(target_os = "redox")]
