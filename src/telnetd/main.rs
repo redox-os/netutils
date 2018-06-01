@@ -26,6 +26,8 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio_reactor::PollEvented;
+
+#[cfg(target_os = "redox")]
 use redox_termios::Winsize;
 
 use getpty::getpty;
