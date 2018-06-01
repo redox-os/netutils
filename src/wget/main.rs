@@ -1,33 +1,25 @@
 #![deny(warnings)]
 
 extern crate arg_parser;
-extern crate hyper;
-extern crate hyper_rustls;
+extern crate reqwest;
 extern crate pbr;
 
 use std::env;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::process;
-use std::time::Duration;
-use hyper::Client;
-use hyper::net::HttpsConnector;
-use hyper::header::ContentLength;
-use hyper::status::StatusCode;
 use arg_parser::ArgParser;
 use pbr::{ProgressBar, Units};
+use reqwest::{StatusCode, header::ContentLength};
 
 fn wget<W: Write>(url: &str, mut output: W) {
     let mut stderr = io::stderr();
 
-    let mut client = Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
-    client.set_read_timeout(Some(Duration::new(5, 0)));
-    client.set_write_timeout(Some(Duration::new(5, 0)));
-    match client.get(url).send() {
-        Ok(mut response) => match response.status {
+    match reqwest::get(url) {
+        Ok(mut response) => match response.status() {
             StatusCode::Ok => {
                 let mut count = 0;
-                let length = response.headers.get::<ContentLength>().map_or(0, |h| h.0 as usize);
+                let length = response.headers().get::<ContentLength>().map_or(0, |h| h.0 as usize);
 
                 let mut pb = ProgressBar::on(io::stderr(), length as u64);
                 pb.set_units(Units::Bytes);
@@ -43,18 +35,19 @@ fn wget<W: Write>(url: &str, mut output: W) {
                     if res == 0 {
                         break;
                     }
-                    count += match output.write(&buf[.. res]) {
+                    match output.write_all(&buf[.. res]) {
                         Ok(res) => res,
                         Err(err) => {
                             writeln!(stderr, "wget: failed to write data: {}", err).unwrap();
                             process::exit(1);
                         }
                     };
+                    count += res;
                     pb.set(count as u64);
                 }
             },
             _ => {
-                let _ = writeln!(stderr, "wget: failed to receive request: {}", response.status);
+                let _ = writeln!(stderr, "wget: failed to receive request: {}", response.status());
                 process::exit(1);
             }
         },
