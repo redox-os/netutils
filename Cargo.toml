@@ -50,11 +50,11 @@ path = "src/ping/main.rs"
 [dependencies]
 hyper-rustls = "0.6"
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
-redox_event = { git = "https://github.com/redox-os/event.git" }
+redox_event = { git = "https://gitlab.redox-os.org/redox-os/event.git" }
 redox_syscall = "0.1"
 termion = "1.5.1"
-arg_parser = { git = "https://github.com/redox-os/arg-parser.git" }
-extra = { git = "https://github.com/redox-os/libextra.git"}
+arg_parser = { git = "https://gitlab.redox-os.org/redox-os/arg-parser.git" }
+extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git"}
 pbr = { git = "https://github.com/a8m/pb" }
 redox_termios = "0.1.1"
 
@@ -63,15 +63,15 @@ version = "0.10"
 default-features = false
 
 [dependencies.mio]
-git = "https://github.com/redox-os/mio"
+git = "https://gitlab.redox-os.org/redox-os/mio"
 branch = "owned-eventedfd"
 
 [dependencies.tokio]
-git = "https://github.com/redox-os/tokio"
+git = "https://gitlab.redox-os.org/redox-os/tokio"
 branch = "owned-eventedfd"
 
 [dependencies.tokio-reactor]
-git = "https://github.com/redox-os/tokio"
+git = "https://gitlab.redox-os.org/redox-os/tokio"
 branch = "owned-eventedfd"
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
