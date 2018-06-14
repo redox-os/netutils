@@ -57,22 +57,13 @@ arg_parser = { git = "https://gitlab.redox-os.org/redox-os/arg-parser.git" }
 extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git"}
 pbr = { git = "https://github.com/a8m/pb" }
 redox_termios = "0.1.1"
+mio = { git = "https://gitlab.redox-os.org/redox-os/mio" }
+tokio = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
+tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 
 [dependencies.hyper]
 version = "0.10"
 default-features = false
-
-[dependencies.mio]
-git = "https://gitlab.redox-os.org/redox-os/mio"
-branch = "owned-eventedfd"
-
-[dependencies.tokio]
-git = "https://gitlab.redox-os.org/redox-os/tokio"
-branch = "owned-eventedfd"
-
-[dependencies.tokio-reactor]
-git = "https://gitlab.redox-os.org/redox-os/tokio"
-branch = "owned-eventedfd"
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 libc = "0.2"
