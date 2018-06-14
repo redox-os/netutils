@@ -14,12 +14,13 @@ extern crate syscall;
 #[cfg(target_os = "redox")]
 extern crate redox_termios;
 
-use mio::unix::OwnedEventedFd;
+use mio::{Poll as MioPoll, Token, Ready, PollOpt};
+use mio::unix::EventedFd;
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Result, Write};
-use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Child, Stdio};
 use std::sync::{Arc, Mutex};
@@ -49,6 +50,35 @@ pub fn before_exec() -> Result<()> {
     Ok(())
 }
 
+pub struct EventedPty(File);
+
+impl mio::Evented for EventedPty {
+    fn register(&self, poll: &MioPoll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+        EventedFd(&self.0.as_raw_fd()).register(poll, token, interest, opts)
+    }
+
+    fn reregister(&self, poll: &MioPoll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+        EventedFd(&self.0.as_raw_fd()).reregister(poll, token, interest, opts)
+    }
+
+    fn deregister(&self, poll: &MioPoll) -> io::Result<()> {
+        EventedFd(&self.0.as_raw_fd()).deregister(poll)
+    }
+}
+impl io::Read for EventedPty {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+impl io::Write for EventedPty {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
 fn handle(stream: TcpStream, master_fd: RawFd, process: Child) {
     #[cfg(not(target_os = "redox"))]
     unsafe {
@@ -72,7 +102,7 @@ fn handle(stream: TcpStream, master_fd: RawFd, process: Child) {
         ret.expect("failed to set winsize property");
     }
 
-    let master = PollEvented::new(OwnedEventedFd(unsafe { File::from_raw_fd(master_fd) }));
+    let master = PollEvented::new(EventedPty(unsafe { File::from_raw_fd(master_fd) }));
 
     let (stream_read, stream_write) = stream.split();
     let (master_read, master_write) = master.split();
