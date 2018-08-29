@@ -70,7 +70,7 @@ fn main() {
         .add_opt("O", "output-document");
     parser.parse(env::args());
 
-    match parser.args.get(0) {
+    match env::args().nth(1) {
         Some(url) => match parser.get_opt("output-document") {
             Some(path) => match File::create(&path) {
                 Ok(mut file) => {
