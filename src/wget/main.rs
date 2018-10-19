@@ -4,6 +4,7 @@ extern crate arg_parser;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate pbr;
+extern crate url;
 
 use std::env;
 use std::fs::File;
@@ -16,6 +17,12 @@ use hyper::header::ContentLength;
 use hyper::status::StatusCode;
 use arg_parser::ArgParser;
 use pbr::{ProgressBar, Units};
+use url::Url;
+
+enum WgetOutput {
+    File { path: String },
+    Stdout,
+}
 
 fn wget<W: Write>(url: &str, mut output: W) {
     let mut stderr = io::stderr();
@@ -36,7 +43,7 @@ fn wget<W: Write>(url: &str, mut output: W) {
                     let res = match response.read(&mut buf) {
                         Ok(res) => res,
                         Err(err) => {
-                            writeln!(stderr, "wget: failed to read data: {}", err).unwrap();
+                            let _ = writeln!(stderr, "wget: failed to read data: {}", err);
                             process::exit(1);
                         }
                     };
@@ -46,7 +53,7 @@ fn wget<W: Write>(url: &str, mut output: W) {
                     count += match output.write(&buf[.. res]) {
                         Ok(res) => res,
                         Err(err) => {
-                            writeln!(stderr, "wget: failed to write data: {}", err).unwrap();
+                            let _ = writeln!(stderr, "wget: failed to write data: {}", err);
                             process::exit(1);
                         }
                     };
@@ -71,26 +78,59 @@ fn main() {
     parser.parse(env::args());
 
     match parser.args.get(0) {
-        Some(url) => match parser.get_opt("output-document") {
-            Some(path) => match File::create(&path) {
-                Ok(mut file) => {
-                    wget(&url, &mut file);
-                    if let Err(err) = file.sync_all() {
-                        let _ = writeln!(io::stderr(), "wget: failed to sync data: {}", err);
+        Some(url) => {
+            let output = match parser.get_opt("output-document") {
+                Some(path) => {
+                    if path == "-" {
+                        WgetOutput::Stdout
+                    } else {
+                        WgetOutput::File { path }
+                    }
+                },
+                None => {
+                    match Url::parse(url) {
+                        Ok(parsed_url) => {
+                            let path = match parsed_url.path_segments() {
+                                Some(path_segments) => path_segments.last().unwrap_or(""),
+                                None => "",
+                            }.to_string();
+
+                            if path.is_empty() {
+                                let _ = writeln!(io::stderr(), "wget: failed to derive output path from url");
+                                process::exit(1);
+                            } else {
+                                WgetOutput::File { path }
+                            }
+                        },
+                        Err(err) => {
+                            let _ = writeln!(io::stderr(), "wget: failed to parse url: {}", err);
+                            process::exit(1);
+                        }
+                    }
+                }
+            };
+
+            match output {
+                WgetOutput::File { path } => match File::create(&path) {
+                    Ok(mut file) => {
+                        wget(&url, &mut file);
+                        if let Err(err) = file.sync_all() {
+                            let _ = writeln!(io::stderr(), "wget: failed to sync data: {}", err);
+                            process::exit(1);
+                        }
+                    },
+                    Err(err) => {
+                        let _ = writeln!(io::stderr(), "wget: failed to create '{}': {}", path, err);
                         process::exit(1);
                     }
                 },
-                Err(err) => {
-                    writeln!(io::stderr(), "wget: failed to create '{}': {}", path, err).unwrap();
-                    process::exit(1);
+                WgetOutput::Stdout => {
+                    wget(&url, io::stdout());
                 }
-            },
-            None => {
-                wget(&url, io::stdout());
             }
         },
         None => {
-            writeln!(io::stderr(), "wget http://host:port/path [-O output]").unwrap();
+            let _ = writeln!(io::stderr(), "wget http://host:port/path [-O output]");
             process::exit(1);
         }
     }
