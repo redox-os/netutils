@@ -1,5 +1,3 @@
-#![feature(ascii_ctype)]
-
 extern crate extra;
 extern crate arg_parser;
 
@@ -8,7 +6,6 @@ use std::process::exit;
 use std::error::Error;
 use std::net::TcpStream;
 use std::io::{Write, BufRead, BufReader};
-use std::ascii::AsciiExt;
 
 fn main() {
     // Setup stderr stream in case of failure. Required by extra::io::fail
