@@ -80,7 +80,7 @@ fn main() {
                         Ok(0) => break,
                         Ok(_) => {
                             print!("{}", line);
-                            let trimmed_line = line.trim_left();
+                            let trimmed_line = line.trim_start();
                             if let Some(trimmed_line) =
                                 [
                                     "whois:",
@@ -93,8 +93,8 @@ fn main() {
                                     .find_map(|&prefix| trimmed_line.get(prefix.len()..))
                             {
                                 nhost = trimmed_line
-                                    .trim_left()
-                                    .trim_right_matches(|c: char| {
+                                    .trim_start()
+                                    .trim_end_matches(|c: char| {
                                         !(c.is_ascii_alphanumeric() || c == '.' || c == '-')
                                     })
                                     .to_ascii_lowercase();
