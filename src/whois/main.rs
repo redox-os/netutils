@@ -31,7 +31,7 @@ fn main() {
         }
 
         if let Some(hostname) = parser.get_opt("host") {
-            // For easier case insenstive comparisons, lowercase the host.
+            // For easier case insensitive comparisons, lowercase the host.
             host = hostname.to_ascii_lowercase();
         }
 
