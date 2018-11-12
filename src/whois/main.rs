@@ -1,5 +1,3 @@
-#![feature(ascii_ctype)]
-
 extern crate extra;
 extern crate arg_parser;
 
