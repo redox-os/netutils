@@ -6,7 +6,6 @@ use std::process::exit;
 use std::error::Error;
 use std::net::TcpStream;
 use std::io::{Write, BufRead, BufReader};
-use std::ascii::AsciiExt;
 
 fn main() {
     // Setup stderr stream in case of failure. Required by extra::io::fail
@@ -32,7 +31,7 @@ fn main() {
         }
 
         if let Some(hostname) = parser.get_opt("host") {
-            // For easier case insenstive comparisons, lowercase the host.
+            // For easier case insensitive comparisons, lowercase the host.
             host = hostname.to_ascii_lowercase();
         }
 
@@ -76,49 +75,42 @@ fn main() {
                  * borrowed from the FreeBSD whois client. */
                 let mut reader = BufReader::new(stream);
                 let mut line = String::with_capacity(64);
-                'line_reading: loop {
+                loop {
                     match reader.read_line(&mut line) {
                         Ok(0) => break,
                         Ok(_) => {
                             print!("{}", line);
-                            let trimmed_line = line.trim_left();
-                            for prefix in [
-                                "whois:",
-                                "Whois Server:",
-                                "Registrar WHOIS Server:",
-                                "ReferralServer:  whois://",
-                                "descr:          region. Please query",
-                            ].iter()
+                            let trimmed_line = line.trim_start();
+                            if let Some(trimmed_line) =
+                                [
+                                    "whois:",
+                                    "Whois Server:",
+                                    "Registrar WHOIS Server:",
+                                    "ReferralServer:  whois://",
+                                    "descr:          region. Please query",
+                                ].iter()
+                                    .filter(|&prefix| trimmed_line.starts_with(prefix))
+                                    .find_map(|&prefix| trimmed_line.get(prefix.len()..))
                             {
-                                if trimmed_line.starts_with(prefix) {
-                                    if let Some(trimmed_line) = trimmed_line.get(prefix.len()..) {
+                                nhost = trimmed_line
+                                    .trim_start()
+                                    .trim_end_matches(|c: char| {
+                                        !(c.is_ascii_alphanumeric() || c == '.' || c == '-')
+                                    })
+                                    .to_ascii_lowercase();
 
-                                        nhost = trimmed_line
-                                            .trim_left()
-                                            .trim_right_matches(|c: char| {
-                                                !(c.is_ascii_alphanumeric() || c == '.' || c == '-')
-                                            })
-                                            .to_ascii_lowercase();
-
-                                        //Print the rest of the whois data
-                                        if let Err(e) = std::io::copy(
-                                            &mut reader,
-                                            &mut std::io::stdout(),
-                                        )
-                                        {
-                                            fail(
-                                                format!(
-                                                    "Can't print whois data from {}, {}",
-                                                    host,
-                                                    e.description()
-                                                ).as_str(),
-                                                &mut stderr,
-                                            );
-                                        }
-                                        break 'line_reading;
-                                    }
-                                    break;
+                                //Print the rest of the whois data
+                                if let Err(e) = std::io::copy(&mut reader, &mut std::io::stdout()) {
+                                    fail(
+                                        format!(
+                                            "Can't print whois data from {}, {}",
+                                            host,
+                                            e.description()
+                                        ).as_str(),
+                                        &mut stderr,
+                                    );
                                 }
+                                break;
                             }
                         }
                         Err(e) => {
