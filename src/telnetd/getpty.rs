@@ -44,8 +44,6 @@ pub fn getpty() -> (RawFd, PathBuf) {
 
 #[cfg(target_os="redox")]
 pub fn getpty() -> (RawFd, PathBuf) {
-    use syscall;
-
     let master = syscall::open("pty:", syscall::O_RDWR | syscall::O_CREAT | syscall::O_NONBLOCK).unwrap();
     let mut buf: [u8; 4096] = [0; 4096];
     let count = syscall::fpath(master, &mut buf).unwrap();
