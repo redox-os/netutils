@@ -15,9 +15,9 @@ path = "src/dhcpd/main.rs"
 name = "dns"
 path = "src/dns/main.rs"
 
-[[bin]]
-name = "httpd"
-path = "src/httpd/main.rs"
+# [[bin]]
+# name = "httpd"
+# path = "src/httpd/main.rs"
 
 [[bin]]
 name = "irc"
@@ -31,13 +31,13 @@ path = "src/nc/main.rs"
 name = "ntp"
 path = "src/ntp/main.rs"
 
-[[bin]]
-name = "telnetd"
-path = "src/telnetd/main.rs"
+# [[bin]]
+# name = "telnetd"
+# path = "src/telnetd/main.rs"
 
-[[bin]]
-name = "wget"
-path = "src/wget/main.rs"
+# [[bin]]
+# name = "wget"
+# path = "src/wget/main.rs"
 
 [[bin]]
 name = "whois"
@@ -48,23 +48,32 @@ name = "ping"
 path = "src/ping/main.rs"
 
 [dependencies]
-hyper-rustls = "0.6"
+# hyper-rustls = "0.16.1"
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_event = { git = "https://gitlab.redox-os.org/redox-os/event.git" }
-redox_syscall = "0.1"
-termion = "1.5.1"
+redox_syscall = "0.1.54"
+termion = "1.5.2"
 arg_parser = { git = "https://gitlab.redox-os.org/redox-os/arg-parser.git" }
 extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git"}
-pbr = { git = "https://github.com/a8m/pb" }
+pbr = "1.0.1"
 redox_termios = "0.1.1"
-mio = { git = "https://gitlab.redox-os.org/redox-os/mio" }
-tokio = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
-tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
-url = "1.7.1"
+mio = "0.6.16"
+# tokio = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
+# tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
+url = "1.7.2"
 
-[dependencies.hyper]
-version = "0.10"
-default-features = false
+# [dependencies.hyper]
+# version = "0.12.27"
+# default-features = false
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
-libc = "0.2"
+libc = "0.2.51"
+
+[patch.crates-io]
+libc = { git = "https://gitlab.redox-os.org/redox-os/liblibc.git", branch = "redox-unix" }
+mio = { git = "https://gitlab.redox-os.org/redox-os/mio" }
+net2 = { git = "https://gitlab.redox-os.org/redox-os/net2-rs.git", branch = "redox-unix" }
+pbr = { git = "https://gitlab.redox-os.org/redox-os/pb.git", branch = "redox-unix" }
+# ring = { git = "https://gitlab.redox-os.org/redox-os/ring.git", branch = "redox-unix" }
+time = { git = "https://gitlab.redox-os.org/redox-os/time.git", branch = "redox-unix" }
+untrusted = { git = "https://github.com/briansmith/untrusted", tag = "ring-master" }
