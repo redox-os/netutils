@@ -151,7 +151,7 @@ fn telnet() {
                     .stdin(Stdio::from_raw_fd(slave_stdin.into_raw_fd()))
                     .stdout(Stdio::from_raw_fd(slave_stdout.into_raw_fd()))
                     .stderr(Stdio::from_raw_fd(slave_stderr.into_raw_fd()))
-                    .before_exec(|| {
+                    .pre_exec(|| {
                         before_exec()
                     })
                     .spawn()
