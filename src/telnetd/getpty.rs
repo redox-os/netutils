@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 #[cfg(not(target_os="redox"))]
 pub fn getpty() -> (RawFd, PathBuf) {
-    use libc;
     use std::ffi::CStr;
     use std::fs::OpenOptions;
     use std::io::Error;

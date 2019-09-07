@@ -37,7 +37,6 @@ mod getpty;
 
 #[cfg(not(target_os="redox"))]
 pub fn before_exec() -> Result<()> {
-    use libc;
     unsafe {
         libc::setsid();
         libc::ioctl(0, libc::TIOCSCTTY, 1);
