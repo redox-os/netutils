@@ -124,7 +124,15 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             options: [0; 308],
         };
 
-        for (s, mut d) in [53, 1, 1, 255].iter().zip(discover.options.iter_mut()) {
+        for (s, mut d) in [
+            // DHCP Message Type (Discover)
+            53,
+            1,
+            1,
+
+            // End
+            255
+        ].iter().zip(discover.options.iter_mut()) {
             *d = *s;
         }
 
@@ -290,7 +298,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             flags: 0,
             ciaddr: [0; 4],
             yiaddr: [0; 4],
-            siaddr: offer.siaddr,
+            siaddr: [0; 4],
             giaddr: [0; 4],
             chaddr: [
                 current_mac.bytes[0],
@@ -317,15 +325,20 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         };
 
         for (s, mut d) in [
+            // DHCP Message Type (Request)
             53,
             1,
             3,
+
+            // Requested IP Address
             50,
             4,
             offer.yiaddr[0],
             offer.yiaddr[1],
             offer.yiaddr[2],
             offer.yiaddr[3],
+
+            // End
             255,
         ].iter()
             .zip(request.options.iter_mut())
