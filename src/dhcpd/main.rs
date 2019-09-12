@@ -79,11 +79,11 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         "failed to connect udp"
     );
     try_fmt!(
-        socket.set_read_timeout(Some(Duration::new(5, 0))),
+        socket.set_read_timeout(Some(Duration::new(30, 0))),
         "failed to set read timeout"
     );
     try_fmt!(
-        socket.set_write_timeout(Some(Duration::new(5, 0))),
+        socket.set_write_timeout(Some(Duration::new(30, 0))),
         "failed to set write timeout"
     );
 
