@@ -5,7 +5,7 @@ use netutils::{MacAddr};
 use std::{env, process, time};
 use std::io::{self, Read, Write};
 use std::fs::{File, OpenOptions};
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
 use dhcp::Dhcp;
@@ -75,7 +75,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
     let socket = try_fmt!(UdpSocket::bind(("0.0.0.0", 68)), "failed to bind udp");
     try_fmt!(
-        socket.connect(("255.255.255.255", 67)),
+        socket.connect(SocketAddr::from(([255, 255, 255, 255], 67))),
         "failed to connect udp"
     );
     try_fmt!(
@@ -152,6 +152,10 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         );
     }
 
+    try_fmt!(
+        socket.connect(SocketAddr::from((offer.siaddr, 67))),
+        "failed to reconnect udp"
+    );
     {
         let mut subnet_option = None;
         let mut router_option = None;
