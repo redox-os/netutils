@@ -152,10 +152,6 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         );
     }
 
-    try_fmt!(
-        socket.connect(SocketAddr::from((offer.siaddr, 67))),
-        "failed to reconnect udp"
-    );
     {
         let mut subnet_option = None;
         let mut router_option = None;
