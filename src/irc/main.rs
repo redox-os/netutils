@@ -207,7 +207,8 @@ fn main() {
                             let mut channels_lock = channels.lock().unwrap();
 
                             channels_lock.1 += Wrapping(1);
-                            channels_lock.1 %= Wrapping(channels_lock.0.len());
+                            let len = channels_lock.0.len();
+                            channels_lock.1 %= Wrapping(len);
                             println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
                             let channel_number = (channels_lock.1).0;
                             channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
@@ -216,10 +217,11 @@ fn main() {
                             let mut channels_lock = channels.lock().unwrap();
 
                             channels_lock.1 -= Wrapping(1);
-                            channels_lock.1 %= Wrapping(channels_lock.0.len());       
-                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);  
-                            let channel_number = (channels_lock.1).0;     
-                            channels_lock.0.get_mut(channel_number).unwrap().dump_buf();             
+                            let len = channels_lock.0.len();
+                            channels_lock.1 %= Wrapping(len);
+                            println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
+                            let channel_number = (channels_lock.1).0;
+                            channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
                         },
                         "/goto" => {
                             let mut channels_lock = channels.lock().unwrap();
@@ -236,12 +238,13 @@ fn main() {
                                         channels_lock.1 = Wrapping(n - 1);
                                         // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
                                         // channel ID
-                                        channels_lock.1 %= Wrapping(channels_lock.0.len());       
+                                        let len = channels_lock.0.len();
+                                        channels_lock.1 %= Wrapping(len);
                                         println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
 
                                         let channel_number = (channels_lock.1).0;
                                         channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
-                                    }   
+                                    }
                                 }
                             } else {
                                 println!("irc: GOTO: You must provide the channel's number. You can find it by using /list");
@@ -255,14 +258,14 @@ fn main() {
                                     println!("{}{}. > {}{}", color::Fg(color::Green), i + 1, channel.get_name(), style::Reset);
                                 } else if channel.mentioned == true {
                                     println!("{}{}.     {}, {} unread, you were mentioned{}", color::Fg(color::Red), i + 1, channel.get_name(), channel.unread, style::Reset);
-                                } else if channel.unread > 0 { 
+                                } else if channel.unread > 0 {
                                     println!("{}.     {}, {}{}{} unread{}", i + 1, channel.get_name(), color::Fg(color::Yellow), style::Bold, channel.unread, style::Reset);
                                 } else {
                                     println!("{}.     {}, {} unread", i + 1, channel.get_name(), channel.unread);
                                 }
                             }
                         },
-                        "/leave" | "/part" | "/p" => { 
+                        "/leave" | "/part" | "/p" => {
                             let mut channels_lock = channels.lock().unwrap();
 
                             if channels_lock.0.get((channels_lock.1).0).is_some() {
@@ -311,12 +314,13 @@ fn main() {
                                     channels_lock.1 = Wrapping(n - 1);
                                     // Leaving this just in case, remove if you want to, this protects from accidentaly setting a wrong
                                     // channel ID
-                                    channels_lock.1 %= Wrapping(channels_lock.0.len());       
+                                    let len = channels_lock.0.len();
+                                    channels_lock.1 %= Wrapping(len);
                                     println!("irc: Talking on {}", channels_lock.0.get((channels_lock.1).0).unwrap().name);
 
                                     let channel_number = (channels_lock.1).0;
                                     channels_lock.0.get_mut(channel_number).unwrap().dump_buf();
-                                }   
+                                }
                             }
                         }
                     }
@@ -381,15 +385,15 @@ fn main() {
                         let channel: Option<&mut Channel>;
                         channel = channels_lock.0.iter_mut().filter(|chan| {
                             chan.get_name() == _target
-                        }).next(); 
+                        }).next();
 
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Joined {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;    
-                            channel.push_user(source);       
+                            channel.unread += 1;
+                            channel.push_user(source);
                         } else {
                             println!("\x1B[1m{} joined [{}]\x1B[21m", source, message);
                         }
@@ -414,7 +418,7 @@ fn main() {
                             channel.get_name() == chan
                         }).next();
 
-                        let channel = channel.unwrap(); 
+                        let channel = channel.unwrap();
 
                         let users = parts;
                         channel.users = vec![];
@@ -435,7 +439,7 @@ fn main() {
                         let channel: Option<&mut Channel>;
                         channel = channels_lock.0.iter_mut().filter(|chan| {
                             chan.get_name() == _target
-                        }).next(); 
+                        }).next();
 
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
@@ -448,7 +452,7 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Chat {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;             
+                            channel.unread += 1;
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                         }
@@ -465,19 +469,19 @@ fn main() {
                         let _target = message_split[0].to_string();
                         let _target = _target.trim();
                         let message = message_split.get(1).unwrap_or(&"").to_string();
-                        
+
                         let channel: Option<&mut Channel>;
                         channel = channels_lock.0.iter_mut().filter(|chan| {
                             chan.get_name() == _target
-                        }).next(); 
+                        }).next();
 
                         if channel.is_some(){
                             let mut channel = channel.unwrap();
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Parted {user: source.to_string(), message: message});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;   
-                            channel.remove_user(source);          
+                            channel.unread += 1;
+                            channel.remove_user(source);
                         } else {
                             println!("\x1B[1m{} parted {} ({})\x1B[21m", source, _target, message);
                         }
@@ -493,7 +497,7 @@ fn main() {
                         let channel: Option<&mut Channel>;
                         channel = channels_lock.0.iter_mut().filter(|chan| {
                             chan.get_name() == _target
-                        }).next(); 
+                        }).next();
 
                         let parts: Vec<&str> = args.collect();
                         let mut message = parts.join(" ");
@@ -508,11 +512,11 @@ fn main() {
                             //println!("Message hidden"); // this for testing
                             channel.buffer.push(Message::Chat {user: source.to_string(), message: message.clone()});
                             //format!("\x1B[7m{} {}: {}\x1B[27m\n", _target, source, message)
-                            channel.unread += 1;  
+                            channel.unread += 1;
 
                             if message.contains(&nick) {
                                 channel.mentioned = true;
-                            }           
+                            }
                         } else {
                             println!("\x1B[7m{} {}: {}\x1B[27m", _target, source, message);
                         }
