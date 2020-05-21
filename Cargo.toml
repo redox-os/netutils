@@ -57,7 +57,8 @@ arg_parser = { git = "https://gitlab.redox-os.org/redox-os/arg-parser.git" }
 extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git"}
 pbr = "1.0.1"
 redox_termios = "0.1.1"
-mio = "0.6.16"
+mio = "=0.6.14"
+net2 = "=0.2.33"
 # tokio = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 # tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 url = "1.7.2"
@@ -68,3 +69,8 @@ url = "1.7.2"
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 libc = "0.2.51"
+
+[patch.crates-io]
+mio = { git = "https://gitlab.redox-os.org/redox-os/mio.git", branch = "redox-unix" }
+net2 = { git = "https://gitlab.redox-os.org/redox-os/net2-rs.git", branch = "redox-unix" }
+pbr = { git = "https://github.com/jackpot51/pb.git" }
