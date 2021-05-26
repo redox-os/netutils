@@ -58,11 +58,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "extra"
-version = "0.1.0"
-source = "git+https://gitlab.redox-os.org/redox-os/libextra.git#cf213969493db8667052a591e32a1e26d43c4234"
-
-[[package]]
 name = "fuchsia-zircon"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -180,7 +175,6 @@ name = "netutils"
 version = "0.1.0"
 dependencies = [
  "arg_parser",
- "extra",
  "libc",
  "mio",
  "net2",
