@@ -51,14 +51,14 @@ path = "src/ping/main.rs"
 # hyper-rustls = "0.16.1"
 ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox_event = { git = "https://gitlab.redox-os.org/redox-os/event.git" }
-redox_syscall = "0.1.54"
+redox_syscall = "0.2.9"
 termion = "1.5.2"
 arg_parser = { git = "https://gitlab.redox-os.org/redox-os/arg-parser.git" }
-extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git"}
+extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git" }
 pbr = "1.0.1"
 redox_termios = "0.1.1"
 mio = "=0.6.14"
-net2 = "=0.2.33"
+net2 = "=0.2.37"
 # tokio = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 # tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 url = "1.7.2"
@@ -72,4 +72,4 @@ libc = "0.2.51"
 
 [patch.crates-io]
 mio = { git = "https://gitlab.redox-os.org/redox-os/mio.git", branch = "redox-unix" }
-net2 = { git = "https://gitlab.redox-os.org/redox-os/net2-rs.git", branch = "redox-unix" }
+net2 = { git = "https://gitlab.redox-os.org/4lDO2/net2-rs.git", branch = "redox-unix" }
