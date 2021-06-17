@@ -168,7 +168,7 @@ dependencies = [
 [[package]]
 name = "net2"
 version = "0.2.37"
-source = "git+https://gitlab.redox-os.org/4lDO2/net2-rs.git?branch=redox-unix#db0604dcb0a355e6b2fa5bcaad8f175bd6aeb5aa"
+source = "git+https://gitlab.redox-os.org/redox-os/net2-rs.git?branch=master#db0604dcb0a355e6b2fa5bcaad8f175bd6aeb5aa"
 dependencies = [
  "cfg-if 0.1.10",
  "libc",
