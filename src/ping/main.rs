@@ -346,7 +346,7 @@ fn run() -> Result<()> {
 
     event_queue.trigger_all(event::Event {
         fd: 0,
-        flags: 0,
+        flags: syscall::EventFlags::empty(),
     })?;
 
     event_queue.run()?;

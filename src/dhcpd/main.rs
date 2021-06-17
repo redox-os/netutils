@@ -392,7 +392,7 @@ fn main() {
     println!("Running with {} and {}", background, quiet);
 
     if background {
-        if unsafe { syscall::clone(0).unwrap() } == 0 {
+        if unsafe { syscall::clone(syscall::CloneFlags::empty()).unwrap() } == 0 {
             if let Err(err) = dhcp(iface, quiet) {
                 writeln!(io::stderr(), "dhcpd: {}", err).unwrap();
                 process::exit(1);
