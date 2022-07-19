@@ -392,12 +392,15 @@ fn main() {
     println!("Running with {} and {}", background, quiet);
 
     if background {
-        if unsafe { syscall::clone(syscall::CloneFlags::empty()).unwrap() } == 0 {
+        redox_daemon::Daemon::new(move |daemon| {
+            daemon.ready().expect("failed to signal readiness");
+
             if let Err(err) = dhcp(iface, quiet) {
                 writeln!(io::stderr(), "dhcpd: {}", err).unwrap();
                 process::exit(1);
             }
-        }
+            process::exit(0);
+        }).expect("dhcpd: failed to daemonize");
     } else {
         if let Err(err) = dhcp(iface, quiet) {
             println!("Error {}", err);
