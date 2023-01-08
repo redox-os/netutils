@@ -174,7 +174,16 @@ impl Ping {
             timestamp: TimeSpec::default(),
             payload: [0; 40],
         };
-        let readed = self.echo_file.read(&mut payload)?;
+        let readed = match self.echo_file.read(&mut payload) {
+            Ok(cnt) => cnt,
+            Err(e) => {
+                if e.raw_os_error() == Some(syscall::EAGAIN) {
+                    0
+                } else {
+                    return Err(Error::from_io_error(e, "Failed to read from echo file"));
+                }
+            }
+        };
         if readed == 0 {
             return Ok(None);
         }
