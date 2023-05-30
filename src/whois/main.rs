@@ -1,14 +1,12 @@
-extern crate extra;
 extern crate arg_parser;
 
-use extra::io::fail;
 use std::process::exit;
 use std::error::Error;
 use std::net::TcpStream;
 use std::io::{Write, BufRead, BufReader};
 
 fn main() {
-    // Setup stderr stream in case of failure. Required by extra::io::fail
+    // Setup stderr stream in case of failure. Required by fail()
     let mut stderr = std::io::stderr();
 
     // Set defaults
@@ -154,4 +152,15 @@ fn main() {
         previous_hosts.push(host.clone());
         host = nhost;
     }
+}
+
+/// Print error message to standard error, and exit with code, _1_.
+fn fail<'a>(s: &'a str, stderr: &mut std::io::Stderr) -> ! {
+    let mut stderr = stderr.lock();
+
+    let _ = stderr.write(b"error: ");
+    let _ = stderr.write(s.as_bytes());
+    let _ = stderr.write(b"\n");
+    let _ = stderr.flush();
+    exit(1);
 }
