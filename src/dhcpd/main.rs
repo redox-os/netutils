@@ -236,7 +236,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             0
         };
 
-        let new_ips = format!("{}.{}.{}.{}/{}\n127.0.0.1/8\n",
+        let new_ips = format!("{}.{}.{}.{}/{}\n",
                               offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3], mask_len);
         try_fmt!(
             set_iface_cfg_value(iface, "addr/set", &new_ips),
