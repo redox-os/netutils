@@ -26,7 +26,7 @@ NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
 SYNOPSIS
-    ping [-h | --help] [-c count] [-i interval] destination
+    ping [-h | --help] [-c count] [-i interval] [-s packetsize] destination
 
 DESCRIPTION
     ping sends ICMP ECHO_REQUEST packets to the specified destination host
@@ -42,11 +42,15 @@ OPTIONS
 
     -i interval
         Wait interval seconds before sending next packet.
+
+    -s packetsize
+        Specifies the number of data bytes to be sent. The default is 58.
 "#; /* @MANEND */
 
 const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
+const PING_DEF_PACKET_SIZE: usize = 64 - 6; /* minus 6 bytes of ICMP header data */
 
 enum ErrorType {
     IOError(IOError),
@@ -106,19 +110,20 @@ impl convert::From<IOError> for Error {
 
 type Result<T> = result::Result<T, Error>;
 
-#[repr(C)]
+#[repr(C, packed)]
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
-    payload: [u8; 40],
 }
+
+const ECHO_PAYLOAD_SIZE: usize = mem::size_of::<EchoPayload>();
 
 impl Deref for EchoPayload {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         unsafe {
             slice::from_raw_parts(self as *const EchoPayload as *const u8,
-                                  mem::size_of::<EchoPayload>()) as &[u8]
+                                  ECHO_PAYLOAD_SIZE) as &[u8]
         }
     }
 }
@@ -127,7 +132,7 @@ impl DerefMut for EchoPayload {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
             slice::from_raw_parts_mut(self as *mut EchoPayload as *mut u8,
-                                      mem::size_of::<EchoPayload>()) as &mut [u8]
+                                      ECHO_PAYLOAD_SIZE) as &mut [u8]
         }
     }
 }
@@ -142,6 +147,8 @@ struct Ping {
     waiting_for: Vec<(TimeSpec, usize)>,
     packets_to_send: usize,
     interval: i64,
+    send_buf: Vec<u8>,
+    recv_buf: Vec<u8>,
 }
 
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
@@ -153,10 +160,12 @@ impl Ping {
     pub fn new(remote_host: IpAddr,
                packets_to_send: usize,
                interval: i64,
+               packet_size: usize,
                echo_file: File,
                time_file: File)
                -> Ping {
-        Ping {
+        let mut fill: u8 = u8::MAX;
+        let mut ping_obj = Ping {
             remote_host,
             echo_file,
             time_file,
@@ -165,16 +174,22 @@ impl Ping {
             waiting_for: vec![],
             packets_to_send,
             interval,
-        }
+            send_buf: Vec::with_capacity(packet_size),
+            recv_buf: Vec::with_capacity(packet_size),
+        };
+
+        ping_obj.send_buf.resize_with(packet_size, || { fill += 1; fill});
+        ping_obj.recv_buf.resize(packet_size, 0);
+
+        ping_obj
     }
 
     pub fn on_echo_event(&mut self) -> Result<Option<()>> {
         let mut payload = EchoPayload {
             seq: 0,
             timestamp: TimeSpec::default(),
-            payload: [0; 40],
         };
-        let readed = match self.echo_file.read(&mut payload) {
+        let readed = match self.echo_file.read(&mut self.recv_buf) {
             Ok(cnt) => cnt,
             Err(e) => {
                 if e.raw_os_error() == Some(syscall::EAGAIN) {
@@ -187,11 +202,13 @@ impl Ping {
         if readed == 0 {
             return Ok(None);
         }
-        if readed < mem::size_of::<EchoPayload>() {
+        if readed < self.recv_buf.len() {
             return Err(Error::new_local("Not enough data in the echo file"));
         }
+        let (payload_buf, _) = self.recv_buf.split_at(ECHO_PAYLOAD_SIZE);
+        payload.copy_from_slice(payload_buf);
         let mut time = TimeSpec::default();
-        syscall::clock_gettime(syscall::CLOCK_MONOTONIC, &mut time)
+        syscall::clock_gettime(syscall::CLOCK_REALTIME, &mut time)
             .map_err(|_| Error::new_local("Failed to get the current time"))?;
         let remote_host = self.remote_host;
         let mut recieved = 0;
@@ -201,7 +218,7 @@ impl Ping {
                         println!("From {} icmp_seq={} time={}ms",
                                  remote_host,
                                  seq,
-                                 time_diff_ms(&payload.timestamp, &time));
+                                 time_diff_ms(&{payload.timestamp}, &time));
                         false
                     } else {
                         true
@@ -231,9 +248,9 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
-            payload: [1; 40],
         };
-        let _ = self.echo_file.write(&payload)?;
+        self.set_echo_hdr(&payload);
+        let _ = self.echo_file.write(&self.send_buf)?;
         let mut timeout_time = *time;
         timeout_time.tv_sec += PING_TIMEOUT_S;
         self.waiting_for.push((timeout_time, self.seq));
@@ -269,6 +286,11 @@ impl Ping {
     fn get_recieved(&self) -> usize {
         self.recieved
     }
+
+    fn set_echo_hdr(&mut self, hdr: &[u8]) {
+        let (left, _) = self.send_buf.split_at_mut(hdr.len());
+        left.copy_from_slice(hdr);
+    }
 }
 
 fn resolve_host(host: &str) -> Result<IpAddr> {
@@ -282,6 +304,7 @@ fn run() -> Result<()> {
     let mut args = args().skip(1);
     let mut count = PING_PACKETS_TO_SEND;
     let mut interval = PING_INTERVAL_S;
+    let mut packet_size = PING_DEF_PACKET_SIZE;
     let mut remote_host = "".to_owned();
 
     while let Some(arg) = args.next() {
@@ -311,6 +334,18 @@ fn run() -> Result<()> {
                         Error::from_int_parse_error(e, "Invalid argument to -c option")
                     })?;
             }
+            "-s" => {
+                packet_size = usize::from_str(&args.next()
+                                         .ok_or_else(|| {
+                                             Error::new_local("No argument to -s option")
+                                         })?)
+                    .map_err(|e| {
+                        Error::from_int_parse_error(e, "Invalid argument to -s option")
+                    })?;
+                if packet_size < ECHO_PAYLOAD_SIZE {
+                    packet_size = ECHO_PAYLOAD_SIZE;
+                }
+            }
             host => {
                 if remote_host.is_empty() {
                     remote_host = host.to_owned();
@@ -327,7 +362,7 @@ fn run() -> Result<()> {
     let echo_fd = syscall::open(&icmp_path, syscall::O_RDWR | syscall::O_NONBLOCK)
         .map_err(|_| Error::new_local(format!("Can't open path {}", icmp_path)))?;
 
-    let time_path = format!("time:{}", syscall::CLOCK_MONOTONIC);
+    let time_path = format!("time:{}", syscall::CLOCK_REALTIME);
     let time_fd = syscall::open(&time_path, syscall::O_RDWR)
         .map_err(|_| Error::new_local(format!("Can't open path {}", time_path)))?;
 
@@ -335,6 +370,7 @@ fn run() -> Result<()> {
     let ping = Rc::new(RefCell::new(Ping::new(remote_host,
                                               count,
                                               interval,
+                                              packet_size,
                                               unsafe { File::from_raw_fd(echo_fd as RawFd) },
                                               unsafe { File::from_raw_fd(time_fd as RawFd) })));
 
