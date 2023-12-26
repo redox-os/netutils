@@ -1,25 +1,21 @@
-extern crate syscall;
+extern crate anyhow;
 extern crate event;
+extern crate libredox;
 
-use event::EventQueue;
-use std::cell::RefCell;
+use std::borrow::BorrowMut;
 use std::env::args;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::io::Error as IOError;
-use std::num::ParseIntError;
 use std::mem;
 use std::net::{IpAddr, ToSocketAddrs};
 use std::ops::{DerefMut, Deref};
-use std::os::unix::io::{RawFd, FromRawFd};
 use std::process;
-use std::rc::Rc;
 use std::slice;
 use std::str::FromStr;
-use syscall::data::TimeSpec;
-use std::fmt;
-use std::result;
-use std::convert;
+
+use anyhow::{bail, Error, Result, Context, anyhow};
+use event::{EventQueue, user_data, EventFlags};
+use libredox::{Fd, flag};
+use libredox::data::TimeSpec;
 
 static PING_MAN: &'static str = /* @MANSTART{ping} */ r#"
 NAME
@@ -47,64 +43,6 @@ OPTIONS
 const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
-
-enum ErrorType {
-    IOError(IOError),
-    IntParseError(ParseIntError),
-    LocalError,
-}
-
-struct Error {
-    error_type: ErrorType,
-    descr: String,
-}
-
-impl Error {
-    pub fn new_local<S: Into<String>>(descr: S) -> Error {
-        Error {
-            error_type: ErrorType::LocalError,
-            descr: descr.into(),
-        }
-    }
-
-    pub fn from_int_parse_error<S: Into<String>>(int_parse_error: ParseIntError,
-                                                 descr: S)
-                                                 -> Error {
-        Error {
-            error_type: ErrorType::IntParseError(int_parse_error),
-            descr: descr.into(),
-        }
-    }
-
-    pub fn from_io_error<S: Into<String>>(io_error: IOError, descr: S) -> Error {
-        Error {
-            error_type: ErrorType::IOError(io_error),
-            descr: descr.into(),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
-        match self.error_type {
-            ErrorType::IntParseError(ref int_parse_error) => {
-                write!(f, "{} : int parse error: {}", self.descr, int_parse_error)
-            }
-            ErrorType::IOError(ref io_error) => {
-                write!(f, "{} : io error : {}", self.descr, io_error)
-            }
-            ErrorType::LocalError => write!(f, "{}", self.descr),
-        }
-    }
-}
-
-impl convert::From<IOError> for Error {
-    fn from(e: IOError) -> Self {
-        Error::from_io_error(e, "")
-    }
-}
-
-type Result<T> = result::Result<T, Error>;
 
 #[repr(C)]
 struct EchoPayload {
@@ -134,8 +72,8 @@ impl DerefMut for EchoPayload {
 
 struct Ping {
     remote_host: IpAddr,
-    time_file: File,
-    echo_file: File,
+    time_file: Fd,
+    echo_file: Fd,
     seq: usize,
     recieved: usize,
     //TODO: replace with BTreeMap once TimeSpec implements Ord
@@ -153,8 +91,8 @@ impl Ping {
     pub fn new(remote_host: IpAddr,
                packets_to_send: usize,
                interval: i64,
-               echo_file: File,
-               time_file: File)
+               echo_file: Fd,
+               time_file: Fd)
                -> Ping {
         Ping {
             remote_host,
@@ -171,28 +109,24 @@ impl Ping {
     pub fn on_echo_event(&mut self) -> Result<Option<()>> {
         let mut payload = EchoPayload {
             seq: 0,
-            timestamp: TimeSpec::default(),
+            timestamp: TimeSpec { tv_sec: 0, tv_nsec: 0 },
             payload: [0; 40],
         };
         let readed = match self.echo_file.read(&mut payload) {
             Ok(cnt) => cnt,
-            Err(e) => {
-                if e.raw_os_error() == Some(syscall::EAGAIN) {
-                    0
-                } else {
-                    return Err(Error::from_io_error(e, "Failed to read from echo file"));
-                }
+            Err(e) if e.is_wouldblock() => {
+                0
             }
+            Err(e) => return Err(e).context("Failed to read from echo file"),
         };
         if readed == 0 {
             return Ok(None);
         }
         if readed < mem::size_of::<EchoPayload>() {
-            return Err(Error::new_local("Not enough data in the echo file"));
+            bail!("Not enough data in the echo file");
         }
-        let mut time = TimeSpec::default();
-        syscall::clock_gettime(syscall::CLOCK_MONOTONIC, &mut time)
-            .map_err(|_| Error::new_local("Failed to get the current time"))?;
+        let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+            .context("Failed to get the current time")?;
         let remote_host = self.remote_host;
         let mut recieved = 0;
         self.waiting_for
@@ -211,16 +145,17 @@ impl Ping {
     }
 
     pub fn on_time_event(&mut self) -> Result<Option<()>> {
-        let mut time = TimeSpec::default();
-        if self.time_file.read(&mut time)? < mem::size_of::<TimeSpec>() {
-            return Err(Error::new_local("Failed to read from time file"));
+        let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
+        if self.time_file.read(&mut buf)? < mem::size_of::<TimeSpec>() {
+            bail!("Failed to read from time file");
         }
+        let time = libredox::data::timespec_from_mut_bytes(&mut buf);
         self.send_ping(&time)?;
         self.check_timeouts(&time)?;
         time.tv_sec += self.interval;
         self.time_file
-            .write_all(&time)
-            .map_err(|e| Error::from_io_error(e, "Failed to write to time file"))?;
+            .write(&buf)
+            .context("Failed to write to time file")?;
         self.is_finished()
     }
 
@@ -274,11 +209,11 @@ impl Ping {
 fn resolve_host(host: &str) -> Result<IpAddr> {
     match (host, 0).to_socket_addrs()?.next() {
         Some(addr) => Ok(addr.ip()),
-        None => Err(Error::new_local("Failed to resolve remote host's IP address"))
+        None => Err(anyhow!("Failed to resolve remote host's IP address")),
     }
 }
 
-fn run() -> Result<()> {
+fn main() -> Result<()> {
     let mut args = args().skip(1);
     let mut count = PING_PACKETS_TO_SEND;
     let mut interval = PING_INTERVAL_S;
@@ -293,29 +228,29 @@ fn run() -> Result<()> {
             "-i" => {
                 interval = i64::from_str(&args.next()
                                          .ok_or_else(|| {
-                                             Error::new_local("No argument to -i option")
+                                             anyhow!("No argument to -i option")
                                          })?)
                     .map_err(|e| {
-                        Error::from_int_parse_error(e, "Invalid argument to -i option")
+                        anyhow!("{e}: Invalid argument to -i option")
                     })?;
                 if interval <= 0 {
-                    return Err(Error::new_local("Interval can't be less or equal to 0"));
+                    bail!("Interval can't be less or equal to 0");
                 }
             }
             "-c" => {
                 count = usize::from_str(&args.next()
                                         .ok_or_else(|| {
-                                            Error::new_local("No argument to -c option")
+                                            anyhow!("No argument to -c option")
                                         })?)
                     .map_err(|e| {
-                        Error::from_int_parse_error(e, "Invalid argument to -c option")
+                        anyhow!("{e}: Invalid argument to -c option")
                     })?;
             }
             host => {
                 if remote_host.is_empty() {
                     remote_host = host.to_owned();
                 } else {
-                    return Err(Error::new_local("Too many hosts to ping"));
+                    bail!("Too many hosts to ping");
                 }
             }
         }
@@ -324,55 +259,44 @@ fn run() -> Result<()> {
     let remote_host = resolve_host(&remote_host)?;
 
     let icmp_path = format!("icmp:echo/{}", remote_host);
-    let echo_fd = syscall::open(&icmp_path, syscall::O_RDWR | syscall::O_NONBLOCK)
-        .map_err(|_| Error::new_local(format!("Can't open path {}", icmp_path)))?;
+    let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
+        .map_err(|_| anyhow!("Can't open path {}", icmp_path))?;
 
-    let time_path = format!("time:{}", syscall::CLOCK_MONOTONIC);
-    let time_fd = syscall::open(&time_path, syscall::O_RDWR)
-        .map_err(|_| Error::new_local(format!("Can't open path {}", time_path)))?;
+    let time_path = format!("time:{}", flag::CLOCK_MONOTONIC);
+    let time_fd = Fd::open(&time_path, flag::O_RDWR, 0)
+        .map_err(|_| anyhow!("Can't open path {}", time_path))?;
 
+    user_data! {
+        enum EventSource {
+            Echo,
+            Time,
+        }
+    }
 
-    let ping = Rc::new(RefCell::new(Ping::new(remote_host,
-                                              count,
-                                              interval,
-                                              unsafe { File::from_raw_fd(echo_fd as RawFd) },
-                                              unsafe { File::from_raw_fd(time_fd as RawFd) })));
+    let event_queue = EventQueue::<EventSource>::new()
+        .context("Failed to create error queue")?;
 
-    let mut event_queue =
-        EventQueue::<(), Error>::new()
-            .map_err(|e| Error::from_io_error(e, "Failed to create error queue"))?;
+    event_queue.subscribe(echo_fd.raw(), EventSource::Echo, EventFlags::READ)?;
+    event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
-    let ping_ = ping.clone();
+    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
 
-    event_queue
-        .add(echo_fd as RawFd,
-             move |_| ping_.borrow_mut().on_echo_event())?;
+    let _ = ping.on_echo_event();
+    let _ = ping.on_time_event();
 
-    let ping_ = ping.clone();
-    event_queue
-        .add(time_fd as RawFd,
-             move |_| ping_.borrow_mut().on_time_event())?;
+    for event_res in event_queue {
+        let _ = match event_res?.user_data {
+            EventSource::Echo => ping.on_echo_event(),
+            EventSource::Time => ping.on_time_event(),
+        };
+    }
 
-    event_queue.trigger_all(event::Event {
-        fd: 0,
-        flags: syscall::EventFlags::empty(),
-    })?;
-
-    event_queue.run()?;
-
-    let transmited = ping.borrow().get_transmitted();
-    let recieved = ping.borrow().get_recieved();
+    let transmited = ping.get_transmitted();
+    let recieved = ping.get_recieved();
     println!("--- {} ping statistics ---", remote_host);
     println!("{} packets transmitted, {} recieved, {}% packet loss",
              transmited,
              recieved,
              100 * (transmited - recieved) / transmited);
     Ok(())
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
 }
