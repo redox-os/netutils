@@ -1,7 +1,6 @@
 extern crate netutils;
-extern crate syscall;
 
-use netutils::{MacAddr};
+use netutils::MacAddr;
 use std::{env, process, time};
 use std::io::{self, Read, Write};
 use std::fs::{File, OpenOptions};
@@ -93,7 +92,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             htype: 1,
             hlen: 6,
             hops: 0,
-            tid: tid,
+            tid,
             secs: 0,
             flags: 0x8000u16.to_be(),
             ciaddr: [0, 0, 0, 0],
@@ -124,7 +123,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             options: [0; 308],
         };
 
-        for (s, mut d) in [
+        for (s, d) in [
             // DHCP Message Type (Discover)
             53,
             1,
@@ -293,7 +292,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             htype: 1,
             hlen: 6,
             hops: 0,
-            tid: tid,
+            tid,
             secs: 0,
             flags: 0,
             ciaddr: [0; 4],
@@ -324,7 +323,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             options: [0; 308],
         };
 
-        for (s, mut d) in [
+        for (s, d) in [
             // DHCP Message Type (Request)
             53,
             1,
