@@ -388,8 +388,6 @@ fn main() {
         }
     }
 
-    println!("Running with {} and {}", background, quiet);
-
     if background {
         redox_daemon::Daemon::new(move |daemon| {
             daemon.ready().expect("failed to signal readiness");
