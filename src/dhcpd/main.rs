@@ -21,7 +21,7 @@ macro_rules! try_fmt {
 }
 
 fn get_cfg_value(path: &str) -> Result<String, String> {
-    let path = format!("netcfg:{}", path);
+    let path = format!("/scheme/netcfg/{}", path);
     let mut file = File::open(&path).map_err(|_| format!("Can't open {}", &path))?;
     let mut result = String::new();
     file.read_to_string(&mut result)
@@ -35,7 +35,7 @@ fn get_iface_cfg_value(iface: &str, cfg: &str) -> Result<String, String> {
 }
 
 fn set_cfg_value(path: &str, value: &str) -> Result<(), String> {
-    let path = format!("netcfg:{}", path);
+    let path = format!("/scheme/netcfg/{}", path);
     let mut file = OpenOptions::new().read(false).write(true).create(false).open(&path)
         .map_err(|_| format!("Can't open {}", path))?;
     file.write(value.as_bytes())
