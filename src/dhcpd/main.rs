@@ -337,6 +337,14 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             offer.yiaddr[2],
             offer.yiaddr[3],
 
+            // Server IP Address
+            54,
+            4,
+            offer.siaddr[0],
+            offer.siaddr[1],
+            offer.siaddr[2],
+            offer.siaddr[3],
+
             // End
             255,
         ].iter()
