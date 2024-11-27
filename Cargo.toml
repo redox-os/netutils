@@ -47,6 +47,10 @@ path = "src/whois/main.rs"
 name = "ping"
 path = "src/ping/main.rs"
 
+[[bin]]
+name = "ifconfig"
+path = "src/ifconfig/main.rs"
+
 [dependencies]
 anyhow = "1"
 # hyper-rustls = "0.16.1"
