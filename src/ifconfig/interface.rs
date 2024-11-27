@@ -1,8 +1,8 @@
+/// interface.rs
+/// handle interface-related logic for the ifconfig utility on Redox OS.
 use regex::Regex;
 use std::error::Error;
 use std::fmt;
-/// interface.rs
-/// handle interface-related logic for the ifconfig utility on Redox OS.
 use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
@@ -151,6 +151,7 @@ fn validate_ip_address(ip: &str) -> Result<IpAddr, InterfaceError> {
         .map_err(|_| InterfaceError::InvalidIpAddress(ip.to_string()))
 }
 
+
 /// Configures a network interface (placeholder function)
 #[allow(dead_code)]
 pub fn configure_interface(_iface: &str, mac: &str, ip: &str) -> Result<(), InterfaceError> {
@@ -160,7 +161,7 @@ pub fn configure_interface(_iface: &str, mac: &str, ip: &str) -> Result<(), Inte
     // Validate the IP address
     let _parsed_ip = validate_ip_address(ip)?;
 
-    // Proceed with configuration (not implemented)
+    // Proceed with configuration
     // ...
 
     Ok(())

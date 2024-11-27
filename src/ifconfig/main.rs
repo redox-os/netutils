@@ -1,5 +1,28 @@
 // main.rs
-// Entry point for the ifconfig utility on Redox OS.
+
+
+/*
+Entry point for the ifconfig utility on Redox OS.
+
+This program implements a basic `ifconfig` utility for Redox OS. It allows users to:
+
+* **Display information** about network interfaces on the system.
+* **List all interfaces** with their IP addresses, netmasks, and (placeholder) MAC addresses.
+* **Display details** for a specific interface provided as an argument.
+
+The program supports the following options:
+
+* `-h` or `--help`: Prints the help message and exits.
+* `-a`: Shows information about all available interfaces.
+
+**Limitations:**
+
+* Currently, the program cannot configure network interfaces (work in progress).
+* The displayed MAC address is a placeholder.
+
+*/
+
+
 
 extern crate regex;
 use std::env;
@@ -15,7 +38,31 @@ NAME
 SYNOPSIS
     ifconfig [-h | --help] [-a] interface
 
-DESCRIPTION
+DESCRIPTION//! ## ifconfig Utility for Redox OS
+
+This program implements a basic `ifconfig` utility for Redox OS. It allows users to:
+
+* **Display information** about network interfaces on the system.
+* **List all interfaces** with their IP addresses, netmasks, and (placeholder) MAC addresses.
+* **Display details** for a specific interface provided as an argument.
+
+The program supports the following options:
+
+* `-h` or `--help`: Prints the help message and exits.
+* `-a`: Shows information about all available interfaces.
+
+**Limitations:**
+
+* Currently, the program cannot configure network interfaces (work in progress).
+* The displayed MAC address is a placeholder (Redox OS implementation might differ).
+
+**Dependencies:**
+
+* This program uses the `regex` crate for parsing IP addresses and netmasks.
+
+**Usage:**
+
+
     Displays and/or configures network interfaces.
 
 OPTIONS
@@ -26,9 +73,6 @@ OPTIONS
         Display information about all available interfaces in the system.
         interface
         This parameter is a string of the form "name unit", for example "eth0".
-
-HISTORY
-    The ifconfig utility appears in redox-os xxx.
 
 AUTHOR
     Written by G. Gielly.
