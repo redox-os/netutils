@@ -47,6 +47,10 @@ path = "src/whois/main.rs"
 name = "ping"
 path = "src/ping/main.rs"
 
+[[bin]]
+name = "ifconfig"
+path = "src/ifconfig/main.rs"
+
 [dependencies]
 anyhow = "1"
 # hyper-rustls = "0.16.1"
@@ -63,6 +67,8 @@ net2 = "=0.2.37"
 # tokio-reactor = { git = "https://gitlab.redox-os.org/redox-os/tokio" }
 url = "1.7.2"
 libredox = "0.1"
+# for ifconfig
+regex = "1"
 
 # [dependencies.hyper]
 # version = "0.12.27"
