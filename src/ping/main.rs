@@ -42,12 +42,13 @@ OPTIONS
 const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
+const ECHO_PAYLOAD_SIZE: usize = 40;
 
 #[repr(C)]
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
-    payload: [u8; 40],
+    payload: [u8; ECHO_PAYLOAD_SIZE],
 }
 
 impl Deref for EchoPayload {
@@ -118,7 +119,7 @@ impl Ping {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
-            payload: [0; 40],
+            payload: [0; ECHO_PAYLOAD_SIZE],
         };
         let readed = match self.echo_file.read(&mut payload) {
             Ok(cnt) => cnt,
@@ -175,7 +176,7 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
-            payload: [1; 40],
+            payload: [1; ECHO_PAYLOAD_SIZE],
         };
         let _ = self.echo_file.write(&payload)?;
         let mut timeout_time = *time;
