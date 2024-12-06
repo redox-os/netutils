@@ -2,22 +2,21 @@ extern crate anyhow;
 extern crate event;
 extern crate libredox;
 
-use std::borrow::BorrowMut;
 use std::env::args;
-use std::io::Error as IOError;
 use std::mem;
 use std::net::{IpAddr, ToSocketAddrs};
-use std::ops::{DerefMut, Deref};
-use std::process;
+use std::ops::{Deref, DerefMut};
 use std::slice;
 use std::str::FromStr;
 
-use anyhow::{bail, Error, Result, Context, anyhow};
-use event::{EventQueue, user_data, EventFlags};
-use libredox::{Fd, flag};
+use anyhow::{anyhow, bail, Context, Result};
+use event::{user_data, EventFlags, EventQueue};
 use libredox::data::TimeSpec;
+use libredox::errno::EINTR;
+use libredox::{flag, Fd};
 
-static PING_MAN: &'static str = /* @MANSTART{ping} */ r#"
+static PING_MAN: &'static str = /* @MANSTART{ping} */
+    r#"
 NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
@@ -43,20 +42,25 @@ OPTIONS
 const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
+const ECHO_PAYLOAD_SIZE: usize = 40;
+const IP_HEADER_SIZE: usize = 20;
+const ICMP_HEADER_SIZE: usize = 8;
 
 #[repr(C)]
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
-    payload: [u8; 40],
+    payload: [u8; ECHO_PAYLOAD_SIZE],
 }
 
 impl Deref for EchoPayload {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         unsafe {
-            slice::from_raw_parts(self as *const EchoPayload as *const u8,
-                                  mem::size_of::<EchoPayload>()) as &[u8]
+            slice::from_raw_parts(
+                self as *const EchoPayload as *const u8,
+                mem::size_of::<EchoPayload>(),
+            ) as &[u8]
         }
     }
 }
@@ -64,8 +68,10 @@ impl Deref for EchoPayload {
 impl DerefMut for EchoPayload {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            slice::from_raw_parts_mut(self as *mut EchoPayload as *mut u8,
-                                      mem::size_of::<EchoPayload>()) as &mut [u8]
+            slice::from_raw_parts_mut(
+                self as *mut EchoPayload as *mut u8,
+                mem::size_of::<EchoPayload>(),
+            ) as &mut [u8]
         }
     }
 }
@@ -76,24 +82,26 @@ struct Ping {
     echo_file: Fd,
     seq: usize,
     recieved: usize,
-    //TODO: replace with BTreeMap once TimeSpec implements Ord
+    // TODO: replace with BTreeMap once TimeSpec implements Ord
     waiting_for: Vec<(TimeSpec, usize)>,
     packets_to_send: usize,
     interval: i64,
 }
 
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    ((to.tv_sec - from.tv_sec) * 1_000_000i64 +
-     ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64) as f32 / 1_000.0f32
+    ((to.tv_sec - from.tv_sec) * 1_000_000i64 + ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64)
+        as f32
+        / 1_000.0f32
 }
 
 impl Ping {
-    pub fn new(remote_host: IpAddr,
-               packets_to_send: usize,
-               interval: i64,
-               echo_file: Fd,
-               time_file: Fd)
-               -> Ping {
+    pub fn new(
+        remote_host: IpAddr,
+        packets_to_send: usize,
+        interval: i64,
+        echo_file: Fd,
+        time_file: Fd,
+    ) -> Ping {
         Ping {
             remote_host,
             echo_file,
@@ -109,14 +117,15 @@ impl Ping {
     pub fn on_echo_event(&mut self) -> Result<Option<()>> {
         let mut payload = EchoPayload {
             seq: 0,
-            timestamp: TimeSpec { tv_sec: 0, tv_nsec: 0 },
-            payload: [0; 40],
+            timestamp: TimeSpec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            payload: [0; ECHO_PAYLOAD_SIZE],
         };
         let readed = match self.echo_file.read(&mut payload) {
             Ok(cnt) => cnt,
-            Err(e) if e.is_wouldblock() => {
-                0
-            }
+            Err(e) if e.is_wouldblock() => 0,
             Err(e) => return Err(e).context("Failed to read from echo file"),
         };
         if readed == 0 {
@@ -127,19 +136,24 @@ impl Ping {
         }
         let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
             .context("Failed to get the current time")?;
+
         let remote_host = self.remote_host;
+
         let mut recieved = 0;
-        self.waiting_for
-            .retain(|&(_ts, seq)| if seq as u16 == payload.seq {
-                        recieved += 1;
-                        println!("From {} icmp_seq={} time={}ms",
-                                 remote_host,
-                                 seq,
-                                 time_diff_ms(&payload.timestamp, &time));
-                        false
-                    } else {
-                        true
-                    });
+        self.waiting_for.retain(|&(_ts, seq)| {
+            if seq as u16 == payload.seq {
+                recieved += 1;
+                println!(
+                    "From {} icmp_seq={} time={}ms",
+                    remote_host,
+                    seq,
+                    time_diff_ms(&payload.timestamp, &time)
+                );
+                false
+            } else {
+                true
+            }
+        });
         self.recieved += recieved;
         self.is_finished()
     }
@@ -166,7 +180,7 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
-            payload: [1; 40],
+            payload: [1; ECHO_PAYLOAD_SIZE],
         };
         let _ = self.echo_file.write(&payload)?;
         let mut timeout_time = *time;
@@ -178,19 +192,22 @@ impl Ping {
 
     fn check_timeouts(&mut self, time: &TimeSpec) -> Result<Option<()>> {
         let remote_host = self.remote_host;
-        self.waiting_for
-            .retain(|&(ts, seq)| if ts.tv_sec <= time.tv_sec {
-                        println!("From {} icmp_seq={} timeout", remote_host, seq);
-                        false
-                    } else {
-                        true
-                    });
+        self.waiting_for.retain(|&(ts, seq)| {
+            if ts.tv_sec <= time.tv_sec {
+                println!("From {} icmp_seq={} timeout", remote_host, seq);
+                false
+            } else {
+                true
+            }
+        });
         Ok(None)
     }
 
     fn is_finished(&self) -> Result<Option<()>> {
-        if self.packets_to_send != 0 && self.seq == self.packets_to_send &&
-           self.waiting_for.is_empty() {
+        if self.packets_to_send != 0
+            && self.seq == self.packets_to_send
+            && self.waiting_for.is_empty()
+        {
             Ok(Some(()))
         } else {
             Ok(None)
@@ -220,43 +237,52 @@ fn main() -> Result<()> {
     let mut remote_host = "".to_owned();
 
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                println!("{}", PING_MAN);
-                return Ok(());
+        if arg == "--help" || arg == "-h" {
+            println!("{}", PING_MAN);
+            return Ok(());
+        } else if arg.starts_with("-i") {
+            let value = if arg.len() > 2 {
+                // Option value concatenated directly to the flag, e.g., "-i34"
+                arg[2..].to_string()
+            } else {
+                // Option value provided as next argument
+                args.next()
+                    .ok_or_else(|| anyhow!("No argument to -i option"))?
+            };
+            interval =
+                i64::from_str(&value).map_err(|e| anyhow!("{e}: Invalid argument to -i option"))?;
+            if interval <= 0 {
+                bail!("Interval can't be less or equal to 0");
             }
-            "-i" => {
-                interval = i64::from_str(&args.next()
-                                         .ok_or_else(|| {
-                                             anyhow!("No argument to -i option")
-                                         })?)
-                    .map_err(|e| {
-                        anyhow!("{e}: Invalid argument to -i option")
-                    })?;
-                if interval <= 0 {
-                    bail!("Interval can't be less or equal to 0");
-                }
-            }
-            "-c" => {
-                count = usize::from_str(&args.next()
-                                        .ok_or_else(|| {
-                                            anyhow!("No argument to -c option")
-                                        })?)
-                    .map_err(|e| {
-                        anyhow!("{e}: Invalid argument to -c option")
-                    })?;
-            }
-            host => {
-                if remote_host.is_empty() {
-                    remote_host = host.to_owned();
-                } else {
-                    bail!("Too many hosts to ping");
-                }
+        } else if arg.starts_with("-c") {
+            let value = if arg.len() > 2 {
+                // Option value concatenated directly to the flag, e.g., "-c34"
+                arg[2..].to_string()
+            } else {
+                // Option value provided as next argument
+                args.next()
+                    .ok_or_else(|| anyhow!("No argument to -c option"))?
+            };
+            count = usize::from_str(&value)
+                .map_err(|e| anyhow!("{e}: Invalid argument to -c option"))?;
+        } else {
+            if remote_host.is_empty() {
+                remote_host = arg.to_owned();
+            } else {
+                bail!("Too many hosts to ping");
             }
         }
     }
 
     let remote_host = resolve_host(&remote_host)?;
+
+    let data_size = ECHO_PAYLOAD_SIZE;
+    let total_size = data_size + IP_HEADER_SIZE + ICMP_HEADER_SIZE;
+    // Print the line similar to standard ping output
+    println!(
+        "PING {} ({}) {}({}) bytes of data.",
+        remote_host, remote_host, data_size, total_size
+    );
 
     let icmp_path = format!("icmp:echo/{}", remote_host);
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
@@ -273,30 +299,64 @@ fn main() -> Result<()> {
         }
     }
 
-    let event_queue = EventQueue::<EventSource>::new()
-        .context("Failed to create error queue")?;
+    let event_queue = EventQueue::<EventSource>::new().context("Failed to create event queue")?;
 
     event_queue.subscribe(echo_fd.raw(), EventSource::Echo, EventFlags::READ)?;
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
     let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
 
-    let _ = ping.on_echo_event();
-    let _ = ping.on_time_event();
+    // Send the first ping immediately
+    let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+        .context("Failed to get the current time")?;
+    ping.send_ping(&current_time)?;
 
+    // Schedule the next time event
+    let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
+    let time = libredox::data::timespec_from_mut_bytes(&mut buf);
+    time.tv_sec = current_time.tv_sec + interval;
+    time.tv_nsec = current_time.tv_nsec;
+    ping.time_file
+        .write(&buf)
+        .context("Failed to write to time file")?;
+
+    // Start the event loop
     for event_res in event_queue {
-        let _ = match event_res?.user_data {
-            EventSource::Echo => ping.on_echo_event(),
-            EventSource::Time => ping.on_time_event(),
-        };
+        match event_res {
+            Ok(event) => {
+                let done = match event.user_data {
+                    EventSource::Echo => ping.on_echo_event(),
+                    EventSource::Time => ping.on_time_event(),
+                };
+
+                if let Some(_) = done? {
+                    break;
+                }
+            }
+            Err(e) => {
+                // Handle Interrupted system call error
+                if e.errno() == EINTR {
+                    println!("Interrupted! Exiting gracefully.");
+                    break;
+                }
+                eprintln!("Event queue error: {:?}", e);
+                break;
+            }
+        }
     }
 
-    let transmited = ping.get_transmitted();
-    let recieved = ping.get_recieved();
+    let transmitted = ping.get_transmitted();
+    let received = ping.get_recieved();
     println!("--- {} ping statistics ---", remote_host);
-    println!("{} packets transmitted, {} recieved, {}% packet loss",
-             transmited,
-             recieved,
-             100 * (transmited - recieved) / transmited);
+    println!(
+        "{} packets transmitted, {} packets received, {}% packet loss",
+        transmitted,
+        received,
+        if transmitted > 0 {
+            100 * (transmitted - received) / transmitted
+        } else {
+            0
+        }
+    );
     Ok(())
 }
