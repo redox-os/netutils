@@ -43,6 +43,8 @@ const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
 const PING_PACKETS_TO_SEND: usize = 4;
 const ECHO_PAYLOAD_SIZE: usize = 40;
+const IP_HEADER_SIZE: usize = 20;
+const ICMP_HEADER_SIZE: usize = 8;
 
 #[repr(C)]
 struct EchoPayload {
@@ -134,7 +136,9 @@ impl Ping {
         }
         let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
             .context("Failed to get the current time")?;
+
         let remote_host = self.remote_host;
+
         let mut recieved = 0;
         self.waiting_for.retain(|&(_ts, seq)| {
             if seq as u16 == payload.seq {
@@ -272,6 +276,14 @@ fn main() -> Result<()> {
 
     let remote_host = resolve_host(&remote_host)?;
 
+    let data_size = ECHO_PAYLOAD_SIZE;
+    let total_size = data_size + IP_HEADER_SIZE + ICMP_HEADER_SIZE;
+    // Print the line similar to standard ping output
+    println!(
+        "PING {} ({}) {}({}) bytes of data.",
+        remote_host, remote_host, data_size, total_size
+    );
+
     let icmp_path = format!("icmp:echo/{}", remote_host);
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
         .map_err(|_| anyhow!("Can't open path {}", icmp_path))?;
@@ -337,7 +349,7 @@ fn main() -> Result<()> {
     let received = ping.get_recieved();
     println!("--- {} ping statistics ---", remote_host);
     println!(
-        "{} packets transmitted, {} received, {}% packet loss",
+        "{} packets transmitted, {} packets received, {}% packet loss",
         transmitted,
         received,
         if transmitted > 0 {
