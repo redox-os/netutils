@@ -232,39 +232,40 @@ fn main() -> Result<()> {
     let mut interval = PING_INTERVAL_S;
     let mut remote_host = "".to_owned();
 
-    // Removed signal handling code
-
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                println!("{}", PING_MAN);
-                return Ok(());
+        if arg == "--help" || arg == "-h" {
+            println!("{}", PING_MAN);
+            return Ok(());
+        } else if arg.starts_with("-i") {
+            let value = if arg.len() > 2 {
+                // Option value concatenated directly to the flag, e.g., "-i34"
+                arg[2..].to_string()
+            } else {
+                // Option value provided as next argument
+                args.next()
+                    .ok_or_else(|| anyhow!("No argument to -i option"))?
+            };
+            interval =
+                i64::from_str(&value).map_err(|e| anyhow!("{e}: Invalid argument to -i option"))?;
+            if interval <= 0 {
+                bail!("Interval can't be less or equal to 0");
             }
-            "-i" => {
-                interval = i64::from_str(
-                    &args
-                        .next()
-                        .ok_or_else(|| anyhow!("No argument to -i option"))?,
-                )
-                .map_err(|e| anyhow!("{e}: Invalid argument to -i option"))?;
-                if interval <= 0 {
-                    bail!("Interval can't be less or equal to 0");
-                }
-            }
-            "-c" => {
-                count = usize::from_str(
-                    &args
-                        .next()
-                        .ok_or_else(|| anyhow!("No argument to -c option"))?,
-                )
+        } else if arg.starts_with("-c") {
+            let value = if arg.len() > 2 {
+                // Option value concatenated directly to the flag, e.g., "-c34"
+                arg[2..].to_string()
+            } else {
+                // Option value provided as next argument
+                args.next()
+                    .ok_or_else(|| anyhow!("No argument to -c option"))?
+            };
+            count = usize::from_str(&value)
                 .map_err(|e| anyhow!("{e}: Invalid argument to -c option"))?;
-            }
-            host => {
-                if remote_host.is_empty() {
-                    remote_host = host.to_owned();
-                } else {
-                    bail!("Too many hosts to ping");
-                }
+        } else {
+            if remote_host.is_empty() {
+                remote_host = arg.to_owned();
+            } else {
+                bail!("Too many hosts to ping");
             }
         }
     }
