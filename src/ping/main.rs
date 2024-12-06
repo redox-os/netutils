@@ -51,37 +51,87 @@ const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
 
-#[derive(Clone, Copy)]
+/// A wrapper around `libredox::data::TimeSpec` that adds trait implementations
+/// like `PartialEq`, `Debug`, and ordering traits for usage in data structures.
+///
+/// **Note this wrapper type is necessary because `TimeSpec` 
+/// (from `libredox` crate) does not implement these traits
+/// 
+#[derive(Clone, Copy)] // Allows cheap copying of `OrderedTimeSpec` values
 struct OrderedTimeSpec(libredox::data::TimeSpec);
 
 impl PartialEq for OrderedTimeSpec {
+    /// Checks for equality between two `OrderedTimeSpec` instances.
+    ///
+    /// Two `OrderedTimeSpec` instances are considered equal if both the
+    /// `tv_sec` (seconds) and `tv_nsec` (nanoseconds) fields are equal.
+    ///
+    /// # Example
+    ///
+    /// let a = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 100 });
+    /// let b = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 100 });
+    /// assert!(a == b);
+    ///
+    /// let c = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 200 });
+    /// assert!(a != c);
+    ////
     fn eq(&self, other: &Self) -> bool {
-        self.0.tv_sec == other.0.tv_sec && self.0.tv_nsec == other.0.tv_nsec
+        self.0.tv_sec == other.0.tv_sec // Compare seconds
+            && self.0.tv_nsec == other.0.tv_nsec // Compare nanoseconds
     }
 }
 
 impl fmt::Debug for OrderedTimeSpec {
+    /// Provides a human-readable representation of `OrderedTimeSpec` for debugging purposes.
+    ///
+    /// This formats the output as:
+    /// `OrderedTimeSpec { tv_sec: <seconds>, tv_nsec: <nanoseconds> }`.
+    ///
+    /// # Example Output
+    /// let a = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 200 });
+    /// println!("{:?}", a); // Output: OrderedTimeSpec { tv_sec: 10, tv_nsec: 200 }
+    ///
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "OrderedTimeSpec {{ tv_sec: {}, tv_nsec: {} }}", self.0.tv_sec, self.0.tv_nsec)
+        write!(
+            f,
+            "OrderedTimeSpec {{ tv_sec: {}, tv_nsec: {} }}",
+            self.0.tv_sec,  // Include seconds in output
+            self.0.tv_nsec  // Include nanoseconds in output
+        )
     }
 }
 
 impl Eq for OrderedTimeSpec {}
 
-impl PartialOrd for OrderedTimeSpec {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let sec_order = self.0.tv_sec.cmp(&other.0.tv_sec);
-        if sec_order == Ordering::Equal {
-            Some(self.0.tv_nsec.cmp(&other.0.tv_nsec))
-        } else {
-            Some(sec_order)
-        }
+impl Ord for OrderedTimeSpec {
+    /// Implements the total ordering for `OrderedTimeSpec`.
+    ///
+    /// `Ord` requires a total ordering, meaning any two instances of `OrderedTimeSpec`
+    /// must be comparable. This implementation orders `OrderedTimeSpec` based on
+    /// its inner `TimeSpec` fields, comparing `tv_sec` (seconds) first, and if they
+    /// are equal, comparing `tv_nsec` (nanoseconds).
+    ///
+    /// - `tv_sec`: Primary ordering field (whole seconds).
+    /// - `tv_nsec`: Secondary ordering field (sub-second precision).
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0
+            .tv_sec
+            .cmp(&other.0.tv_sec) // Compare seconds first
+            // If seconds are equal, compare nanoseconds
+            .then_with(|| self.0.tv_nsec.cmp(&other.0.tv_nsec))
     }
 }
 
-impl Ord for OrderedTimeSpec {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+impl PartialOrd for OrderedTimeSpec {
+    /// Provides a partial ordering for `OrderedTimeSpec` by delegating to `Ord`.
+    ///
+    /// `PartialOrd` is required for types that can be compared, but not all
+    /// comparisons must yield a result. For `OrderedTimeSpec`, a total ordering
+    /// exists (via `Ord`), so `partial_cmp` always returns `Some(Ordering)`.
+    ///
+    /// This wraps the result of `cmp` in `Some`.
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other)) // Delegate to `cmp`, as total ordering exists
     }
 }
 
@@ -91,7 +141,6 @@ struct EchoPayload {
     timestamp: TimeSpec,
     payload: [u8; ECHO_PAYLOAD_SIZE],
 }
-
 
 impl Deref for EchoPayload {
     type Target = [u8];
@@ -126,12 +175,6 @@ struct Ping {
     waiting_for: BTreeMap<OrderedTimeSpec, usize>,
     packets_to_send: usize,
     interval: i64,
-}
-
-fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    ((to.tv_sec - from.tv_sec) * 1_000_000i64 + ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64)
-        as f32
-        / 1_000.0f32
 }
 
 impl Ping {
@@ -229,7 +272,8 @@ impl Ping {
 
         let mut timeout_time = *time;
         timeout_time.tv_sec += PING_TIMEOUT_S;
-        self.waiting_for.insert(OrderedTimeSpec(timeout_time), self.seq);
+        self.waiting_for
+            .insert(OrderedTimeSpec(timeout_time), self.seq);
 
         self.seq += 1;
 
@@ -279,6 +323,40 @@ fn resolve_host(host: &str) -> Result<IpAddr> {
         Some(addr) => Ok(addr.ip()),
         None => Err(anyhow!("Failed to resolve remote host's IP address")),
     }
+}
+
+/// Calculates the time difference in milliseconds between two `TimeSpec` instances.
+///
+/// Computes the difference between `from` and `to` in milliseconds,
+/// taking into account both the seconds (`tv_sec`) and nanoseconds (`tv_nsec`) fields
+/// of the `TimeSpec` structure.
+///
+/// # Parameters
+/// - `from`: The earlier time (`TimeSpec`) to subtract from.
+/// - `to`: The later time (`TimeSpec`) to subtract against.
+///
+/// # Returns
+/// - The time difference in milliseconds => `f32`.
+///
+/// # Notes
+/// - The result is signed, meaning it can be negative if `from` is after `to`.
+/// - This assumes that `tv_nsec` values are less than 1 second (valid for `TimeSpec`).
+///
+/// # Example
+/// let from = TimeSpec { tv_sec: 10, tv_nsec: 500_000_000 }; // 10.5 seconds
+/// let to = TimeSpec { tv_sec: 12, tv_nsec: 0 };            // 12.0 seconds
+/// assert_eq!(time_diff_ms(&from, &to), 1500.0);            // 1.5 seconds = 1500 ms
+///
+fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
+    // Compute the difference in seconds and convert to microseconds (1 second = 1_000_000 µs)
+    let seconds_diff = (to.tv_sec - from.tv_sec) * 1_000_000i64;
+
+    // Compute the difference in nanoseconds and convert to microseconds (1 nanosecond = 1/1_000 µs)
+    let nanoseconds_diff = ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64;
+
+    // Combine seconds and nanoseconds differences to get the total difference in microseconds,
+    // then convert to milliseconds (1 millisecond = 1_000 µs)
+    (seconds_diff + nanoseconds_diff) as f32 / 1_000.0f32
 }
 
 fn main() -> Result<()> {
