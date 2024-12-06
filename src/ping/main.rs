@@ -9,6 +9,11 @@ use std::ops::{Deref, DerefMut};
 use std::slice;
 use std::str::FromStr;
 
+use std::cmp::{Ordering, PartialOrd};
+use std::collections::BTreeMap;
+
+use std::fmt;
+
 use anyhow::{anyhow, bail, Context, Result};
 use event::{user_data, EventFlags, EventQueue};
 use libredox::data::TimeSpec;
@@ -46,12 +51,47 @@ const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
 
+#[derive(Clone, Copy)]
+struct OrderedTimeSpec(libredox::data::TimeSpec);
+
+impl PartialEq for OrderedTimeSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.tv_sec == other.0.tv_sec && self.0.tv_nsec == other.0.tv_nsec
+    }
+}
+
+impl fmt::Debug for OrderedTimeSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OrderedTimeSpec {{ tv_sec: {}, tv_nsec: {} }}", self.0.tv_sec, self.0.tv_nsec)
+    }
+}
+
+impl Eq for OrderedTimeSpec {}
+
+impl PartialOrd for OrderedTimeSpec {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let sec_order = self.0.tv_sec.cmp(&other.0.tv_sec);
+        if sec_order == Ordering::Equal {
+            Some(self.0.tv_nsec.cmp(&other.0.tv_nsec))
+        } else {
+            Some(sec_order)
+        }
+    }
+}
+
+impl Ord for OrderedTimeSpec {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 #[repr(C)]
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
     payload: [u8; ECHO_PAYLOAD_SIZE],
 }
+
 
 impl Deref for EchoPayload {
     type Target = [u8];
@@ -82,8 +122,8 @@ struct Ping {
     echo_file: Fd,
     seq: usize,
     recieved: usize,
-    // TODO: replace with BTreeMap once TimeSpec implements Ord
-    waiting_for: Vec<(TimeSpec, usize)>,
+    //Replace Vec with BTreeMap
+    waiting_for: BTreeMap<OrderedTimeSpec, usize>,
     packets_to_send: usize,
     interval: i64,
 }
@@ -108,7 +148,8 @@ impl Ping {
             time_file,
             seq: 0,
             recieved: 0,
-            waiting_for: vec![],
+            // Initialize as BTreeMap
+            waiting_for: BTreeMap::new(),
             packets_to_send,
             interval,
         }
@@ -140,7 +181,7 @@ impl Ping {
         let remote_host = self.remote_host;
 
         let mut recieved = 0;
-        self.waiting_for.retain(|&(_ts, seq)| {
+        self.waiting_for.retain(|_ts, &mut seq| {
             if seq as u16 == payload.seq {
                 recieved += 1;
                 println!(
@@ -177,29 +218,39 @@ impl Ping {
         if self.packets_to_send != 0 && self.seq >= self.packets_to_send {
             return Ok(None);
         }
+
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
             payload: [1; ECHO_PAYLOAD_SIZE],
         };
+
         let _ = self.echo_file.write(&payload)?;
+
         let mut timeout_time = *time;
         timeout_time.tv_sec += PING_TIMEOUT_S;
-        self.waiting_for.push((timeout_time, self.seq));
+        self.waiting_for.insert(OrderedTimeSpec(timeout_time), self.seq);
+
         self.seq += 1;
+
         Ok(None)
     }
 
     fn check_timeouts(&mut self, time: &TimeSpec) -> Result<Option<()>> {
         let remote_host = self.remote_host;
-        self.waiting_for.retain(|&(ts, seq)| {
-            if ts.tv_sec <= time.tv_sec {
-                println!("From {} icmp_seq={} timeout", remote_host, seq);
-                false
-            } else {
-                true
+
+        // Loop until we find a timeout that is still in the past
+        while let Some((&ts, &seq)) = self.waiting_for.first_key_value() {
+            // ts is &OrderedTimeSpec, so ts.0 is the inner TimeSpec
+            if ts.0.tv_sec > time.tv_sec {
+                // This entry is in the future, stop removing entries
+                break;
             }
-        });
+            // This one timed out
+            println!("From {} icmp_seq={} timeout", remote_host, seq);
+            self.waiting_for.pop_first();
+        }
+
         Ok(None)
     }
 
