@@ -54,9 +54,9 @@ const ICMP_HEADER_SIZE: usize = 8;
 /// A wrapper around `libredox::data::TimeSpec` that adds trait implementations
 /// like `PartialEq`, `Debug`, and ordering traits for usage in data structures.
 ///
-/// **Note this wrapper type is necessary because `TimeSpec` 
+/// **Note this wrapper type is necessary because `TimeSpec`
 /// (from `libredox` crate) does not implement these traits
-/// 
+///
 #[derive(Clone, Copy)] // Allows cheap copying of `OrderedTimeSpec` values
 struct OrderedTimeSpec(libredox::data::TimeSpec);
 
@@ -82,8 +82,6 @@ impl PartialEq for OrderedTimeSpec {
 }
 
 impl fmt::Debug for OrderedTimeSpec {
-    /// Provides a human-readable representation of `OrderedTimeSpec` for debugging purposes.
-    ///
     /// This formats the output as:
     /// `OrderedTimeSpec { tv_sec: <seconds>, tv_nsec: <nanoseconds> }`.
     ///
@@ -170,8 +168,8 @@ struct Ping {
     time_file: Fd,
     echo_file: Fd,
     seq: usize,
-    recieved: usize,
-    //Replace Vec with BTreeMap
+    received: usize,
+    //We replace the Vec with BTreeMap
     waiting_for: BTreeMap<OrderedTimeSpec, usize>,
     packets_to_send: usize,
     interval: i64,
@@ -190,8 +188,8 @@ impl Ping {
             echo_file,
             time_file,
             seq: 0,
-            recieved: 0,
-            // Initialize as BTreeMap
+            received: 0,
+            // Initialize as a BTreeMap
             waiting_for: BTreeMap::new(),
             packets_to_send,
             interval,
@@ -223,10 +221,10 @@ impl Ping {
 
         let remote_host = self.remote_host;
 
-        let mut recieved = 0;
+        let mut received = 0;
         self.waiting_for.retain(|_ts, &mut seq| {
             if seq as u16 == payload.seq {
-                recieved += 1;
+                received += 1;
                 println!(
                     "From {} icmp_seq={} time={}ms",
                     remote_host,
@@ -238,7 +236,7 @@ impl Ping {
                 true
             }
         });
-        self.recieved += recieved;
+        self.received += received;
         self.is_finished()
     }
 
@@ -313,8 +311,8 @@ impl Ping {
         self.seq
     }
 
-    fn get_recieved(&self) -> usize {
-        self.recieved
+    fn get_received(&self) -> usize {
+        self.received
     }
 }
 
@@ -475,7 +473,7 @@ fn main() -> Result<()> {
     }
 
     let transmitted = ping.get_transmitted();
-    let received = ping.get_recieved();
+    let received = ping.get_received();
     println!("--- {} ping statistics ---", remote_host);
     println!(
         "{} packets transmitted, {} packets received, {}% packet loss",
