@@ -167,10 +167,10 @@ struct Ping {
     remote_host: IpAddr,
     time_file: Fd,
     echo_file: Fd,
-    seq: usize,
+    seq: u16, // Changed from usize to u16, (max 65 535, ICMP spec)
     received: usize,
     //We replace the Vec with BTreeMap
-    waiting_for: BTreeMap<OrderedTimeSpec, usize>,
+    waiting_for: BTreeMap<OrderedTimeSpec, u16>, // Changed from usize to u16
     packets_to_send: usize,
     interval: i64,
 }
@@ -187,7 +187,7 @@ impl Ping {
             remote_host,
             echo_file,
             time_file,
-            seq: 0,
+            seq: 0, // still 0 in u16
             received: 0,
             // Initialize as a BTreeMap
             waiting_for: BTreeMap::new(),
@@ -256,7 +256,7 @@ impl Ping {
     }
 
     fn send_ping(&mut self, time: &TimeSpec) -> Result<Option<()>> {
-        if self.packets_to_send != 0 && self.seq >= self.packets_to_send {
+        if self.packets_to_send != 0 && usize::from(self.seq) >= self.packets_to_send {
             return Ok(None);
         }
 
@@ -298,7 +298,7 @@ impl Ping {
 
     fn is_finished(&self) -> Result<Option<()>> {
         if self.packets_to_send != 0
-            && self.seq == self.packets_to_send
+            && usize::from(self.seq) == self.packets_to_send
             && self.waiting_for.is_empty()
         {
             Ok(Some(()))
@@ -306,8 +306,9 @@ impl Ping {
             Ok(None)
         }
     }
+    
 
-    fn get_transmitted(&self) -> usize {
+    fn get_transmitted(&self) -> u16 {
         self.seq
     }
 
@@ -480,7 +481,7 @@ fn main() -> Result<()> {
         transmitted,
         received,
         if transmitted > 0 {
-            100 * (transmitted - received) / transmitted
+            100 * ((transmitted as usize) - received) / (transmitted as usize)
         } else {
             0
         }
