@@ -50,6 +50,8 @@ const PING_PACKETS_TO_SEND: usize = 4;
 const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
+const NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
+const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
 
 /// A wrapper around `libredox::data::TimeSpec` that adds trait implementations
 /// like `PartialEq`, `Debug`, and ordering traits for usage in data structures.
@@ -173,6 +175,7 @@ struct Ping {
     waiting_for: BTreeMap<OrderedTimeSpec, u16>, // Changed from usize to u16
     packets_to_send: usize,
     interval: i64,
+    stats: PingStatistics,
 }
 
 impl Ping {
@@ -193,6 +196,7 @@ impl Ping {
             waiting_for: BTreeMap::new(),
             packets_to_send,
             interval,
+            stats: PingStatistics::new(),
         }
     }
 
@@ -205,17 +209,30 @@ impl Ping {
             },
             payload: [0; ECHO_PAYLOAD_SIZE],
         };
+
         let readed = match self.echo_file.read(&mut payload) {
             Ok(cnt) => cnt,
             Err(e) if e.is_wouldblock() => 0,
             Err(e) => return Err(e).context("Failed to read from echo file"),
         };
+
+        if self.received > 0 {
+            let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+                .context("Failed to get the current time")?;
+            let rtt = time_diff_ms(&payload.timestamp, &time);
+            self.stats.record_received(rtt);
+        } else {
+            self.stats.record_error();
+        }
+
         if readed == 0 {
             return Ok(None);
         }
+
         if readed < mem::size_of::<EchoPayload>() {
             bail!("Not enough data in the echo file");
         }
+
         let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
             .context("Failed to get the current time")?;
 
@@ -267,15 +284,21 @@ impl Ping {
         };
 
         let _ = self.echo_file.write(&payload)?;
-
         let mut timeout_time = *time;
+
         timeout_time.tv_sec += PING_TIMEOUT_S;
         self.waiting_for
             .insert(OrderedTimeSpec(timeout_time), self.seq);
 
         self.seq += 1;
 
+        self.stats.record_sent();
+
         Ok(None)
+    }
+
+    fn print_final_statistics(&self) {
+        self.stats.print_summary(self.remote_host);
     }
 
     fn check_timeouts(&mut self, time: &TimeSpec) -> Result<Option<()>> {
@@ -306,7 +329,6 @@ impl Ping {
             Ok(None)
         }
     }
-    
 
     fn get_transmitted(&self) -> u16 {
         self.seq
@@ -314,6 +336,79 @@ impl Ping {
 
     fn get_received(&self) -> usize {
         self.received
+    }
+}
+
+struct PingStatistics {
+    total_sent: u32,
+    total_received: u32,
+    total_errors: u32,
+    min_rtt: Option<f32>,
+    max_rtt: Option<f32>,
+    avg_rtt: f32,
+    rtts: Vec<f32>,
+}
+
+impl PingStatistics {
+    fn new() -> Self {
+        PingStatistics {
+            total_sent: 0,
+            total_received: 0,
+            total_errors: 0,
+            min_rtt: None,
+            max_rtt: None,
+            avg_rtt: 0.0,
+            rtts: Vec::new(),
+        }
+    }
+
+    fn record_sent(&mut self) {
+        self.total_sent += 1;
+    }
+
+    fn record_received(&mut self, rtt: f32) {
+        self.total_received += 1;
+
+        // Update RTT tracking
+        self.rtts.push(rtt);
+
+        // Update min/max RTT
+        self.min_rtt = Some(self.min_rtt.map_or(rtt, |current| current.min(rtt)));
+        self.max_rtt = Some(self.max_rtt.map_or(rtt, |current| current.max(rtt)));
+
+        // Recalculate average
+        self.avg_rtt = self.rtts.iter().sum::<f32>() / self.rtts.len() as f32;
+    }
+
+    fn record_error(&mut self) {
+        self.total_errors += 1;
+    }
+
+    fn packet_loss_percentage(&self) -> f32 {
+        if self.total_sent == 0 {
+            0.0
+        } else {
+            ((self.total_sent - self.total_received) as f32 / self.total_sent as f32) * 100.0
+        }
+    }
+
+    fn print_summary(&self, remote_host: IpAddr) {
+        println!("--- {} ping statistics ---", remote_host);
+        println!(
+            "{} packets transmitted, {} received, {:.2}% packet loss",
+            self.total_sent,
+            self.total_received,
+            self.packet_loss_percentage()
+        );
+
+        if !self.rtts.is_empty() {
+            println!(
+                "rtt min/avg/max = {:.3}/{:.3}/{:.3} ms",
+                self.min_rtt.unwrap(),
+                self.avg_rtt,
+                self.max_rtt.unwrap()
+            );
+        }
     }
 }
 
@@ -347,15 +442,10 @@ fn resolve_host(host: &str) -> Result<IpAddr> {
 /// assert_eq!(time_diff_ms(&from, &to), 1500.0);            // 1.5 seconds = 1500 ms
 ///
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    // Compute the difference in seconds and convert to microseconds (1 second = 1_000_000 µs)
-    let seconds_diff = (to.tv_sec - from.tv_sec) * 1_000_000i64;
+    let seconds_diff = (to.tv_sec - from.tv_sec) * 1_000_000;
+    let nanoseconds_diff = ((to.tv_nsec - from.tv_nsec) as i64) / MICROSECONDS_PER_MILLISECOND;
 
-    // Compute the difference in nanoseconds and convert to microseconds (1 nanosecond = 1/1_000 µs)
-    let nanoseconds_diff = ((to.tv_nsec - from.tv_nsec) as i64) / 1_000i64;
-
-    // Combine seconds and nanoseconds differences to get the total difference in microseconds,
-    // then convert to milliseconds (1 millisecond = 1_000 µs)
-    (seconds_diff + nanoseconds_diff) as f32 / 1_000.0f32
+    (seconds_diff + nanoseconds_diff) as f32 / 1_000.0
 }
 
 fn main() -> Result<()> {
@@ -473,8 +563,12 @@ fn main() -> Result<()> {
         }
     }
 
-    let transmitted = ping.get_transmitted();
-    let received = ping.get_received();
+    //let _transmitted = ping.get_transmitted();
+    //let _received = ping.get_received();
+
+    ping.print_final_statistics();
+
+    /*
     println!("--- {} ping statistics ---", remote_host);
     println!(
         "{} packets transmitted, {} packets received, {}% packet loss",
@@ -485,6 +579,7 @@ fn main() -> Result<()> {
         } else {
             0
         }
-    );
+    );*/
+
     Ok(())
 }
