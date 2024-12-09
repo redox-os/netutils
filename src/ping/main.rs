@@ -27,7 +27,7 @@ NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
 SYNOPSIS
-    ping [-h | --help] [-c count] [-i interval] destination
+    ping [-h | --help] [-c count] [-i interval] [-t ttl] destination
 
 DESCRIPTION
     ping sends ICMP ECHO_REQUEST packets to the specified destination host
@@ -43,6 +43,9 @@ OPTIONS
 
     -i interval
         Wait interval seconds before sending next packet.
+
+    -t ttl
+        Set the IP Time To Live for outgoing packets (default: 64, range: 1-255).
 "#; /* @MANEND */
 
 const PING_INTERVAL_S: i64 = 1;
@@ -51,8 +54,12 @@ const PING_PACKETS_TO_SEND: usize = 4;
 const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
+
 const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
 const _NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
+
+const DEFAULT_TTL: u8 = 64;
+const MAX_TTL: u8 = 255;
 
 fn resolve_host(host: &str) -> Result<IpAddr> {
     match (host, 0).to_socket_addrs()?.next() {
@@ -86,6 +93,7 @@ fn main() -> Result<()> {
     let mut count = PING_PACKETS_TO_SEND;
     let mut interval = PING_INTERVAL_S;
     let mut remote_host = "".to_owned();
+    let mut ttl: Option<u8> = None;
 
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
@@ -105,6 +113,20 @@ fn main() -> Result<()> {
             if interval <= 0 {
                 bail!("Interval can't be less or equal to 0");
             }
+        } else if arg.starts_with("-t") {
+            let value = if arg.len() > 2 {
+                arg[2..].to_string()
+            } else {
+                args.next()
+                    .ok_or_else(|| anyhow!("No argument to -t option"))?
+            };
+            let parsed_ttl =
+                u8::from_str(&value).map_err(|e| anyhow!("{e}: Invalid argument to -t option"))?;
+
+            if parsed_ttl == 0 || parsed_ttl > MAX_TTL {
+                bail!("TTL must be between 1 and 255");
+            }
+            ttl = Some(parsed_ttl);
         } else if arg.starts_with("-c") {
             let value = if arg.len() > 2 {
                 // Option value concatenated directly to the flag, e.g., "-c34"
@@ -155,7 +177,7 @@ fn main() -> Result<()> {
     event_queue.subscribe(echo_fd.raw(), EventSource::Echo, EventFlags::READ)?;
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
-    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
+    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd,ttl);
 
     // Send the first ping immediately
     let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)

@@ -12,6 +12,9 @@ use crate::stats::PingStatistics;
 use anyhow::{bail, Context, Result};
 use std::cmp::Ordering;
 use std::fmt;
+
+
+use DEFAULT_TTL;
 use ECHO_PAYLOAD_SIZE;
 
 use time_diff_ms;
@@ -103,6 +106,7 @@ impl PartialOrd for OrderedTimeSpec {
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
+    ttl: u8,
     payload: [u8; ECHO_PAYLOAD_SIZE],
 }
 
@@ -128,7 +132,7 @@ impl DerefMut for EchoPayload {
         }
     }
 }
-
+use flag;
 pub struct Ping {
     pub remote_host: IpAddr,
     pub time_file: Fd,
@@ -136,11 +140,11 @@ pub struct Ping {
     pub seq: u16, // Changed from usize to u16, (max 65 535, ICMP spec)
     pub received: usize,
     //We replace the Vec with BTreeMap and reduce visibility here
-    //pub waiting_for: BTreeMap<OrderedTimeSpec, u16>, // Changed from usize to u16
     pub(crate) waiting_for: BTreeMap<OrderedTimeSpec, u16>,
     pub packets_to_send: usize,
     pub interval: i64,
     pub stats: PingStatistics,
+    pub ttl: u8,
 }
 
 impl Ping {
@@ -150,6 +154,7 @@ impl Ping {
         interval: i64,
         echo_file: Fd,
         time_file: Fd,
+        ttl: Option<u8>,
     ) -> Ping {
         Ping {
             remote_host,
@@ -162,6 +167,7 @@ impl Ping {
             packets_to_send,
             interval,
             stats: PingStatistics::new(),
+            ttl: ttl.unwrap_or(DEFAULT_TTL),
         }
     }
 
@@ -172,7 +178,9 @@ impl Ping {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
+            ttl: 0,
             payload: [0; ECHO_PAYLOAD_SIZE],
+
         };
 
         let readed = match self.echo_file.read(&mut payload) {
@@ -245,9 +253,16 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
+            ttl: self.ttl,
             payload: [1; ECHO_PAYLOAD_SIZE],
         };
 
+        // Set TTL for the echo file
+        let ttl_path = format!("icmp:echo/{}/ttl", self.remote_host);
+        let ttl_fd = Fd::open(&ttl_path, flag::O_WRONLY, 0).context("Failed to open TTL file")?;
+        ttl_fd.write(&[self.ttl])?;
+
+        let _ = self.echo_file.write(&payload)?;
         let _ = self.echo_file.write(&payload)?;
         let mut timeout_time = *time;
 
