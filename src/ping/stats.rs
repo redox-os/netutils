@@ -1,4 +1,4 @@
-///stat.rs
+///stats.rs
 use std::net::IpAddr;
 
 pub struct PingStatistics {
@@ -57,7 +57,7 @@ impl PingStatistics {
     pub fn print_summary(&self, remote_host: IpAddr) {
         println!("--- {} ping statistics ---", remote_host);
         println!(
-            "{} packets transmitted, {} received, {:.2}% packet loss",
+            "{} packets transmitted, {} packets received, {:.2}% packet loss",
             self.total_sent,
             self.total_received,
             self.packet_loss_percentage()

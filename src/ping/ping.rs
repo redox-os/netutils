@@ -1,3 +1,4 @@
+/// ping.rs
 use libredox::data::TimeSpec;
 use libredox::Fd;
 
@@ -13,8 +14,7 @@ use anyhow::{bail, Context, Result};
 use std::cmp::Ordering;
 use std::fmt;
 
-
-use DEFAULT_TTL;
+//use DEFAULT_TTL;
 use ECHO_PAYLOAD_SIZE;
 
 use time_diff_ms;
@@ -106,7 +106,7 @@ impl PartialOrd for OrderedTimeSpec {
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
-    ttl: u8,
+    //ttl: u8,
     payload: [u8; ECHO_PAYLOAD_SIZE],
 }
 
@@ -132,7 +132,7 @@ impl DerefMut for EchoPayload {
         }
     }
 }
-use flag;
+
 pub struct Ping {
     pub remote_host: IpAddr,
     pub time_file: Fd,
@@ -144,7 +144,7 @@ pub struct Ping {
     pub packets_to_send: usize,
     pub interval: i64,
     pub stats: PingStatistics,
-    pub ttl: u8,
+    //pub ttl: u8,
 }
 
 impl Ping {
@@ -154,7 +154,7 @@ impl Ping {
         interval: i64,
         echo_file: Fd,
         time_file: Fd,
-        ttl: Option<u8>,
+        //ttl: Option<u8>,
     ) -> Ping {
         Ping {
             remote_host,
@@ -167,7 +167,7 @@ impl Ping {
             packets_to_send,
             interval,
             stats: PingStatistics::new(),
-            ttl: ttl.unwrap_or(DEFAULT_TTL),
+            //ttl: ttl.unwrap_or(DEFAULT_TTL),
         }
     }
 
@@ -178,9 +178,8 @@ impl Ping {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
-            ttl: 0,
+            //ttl: 0,
             payload: [0; ECHO_PAYLOAD_SIZE],
-
         };
 
         let readed = match self.echo_file.read(&mut payload) {
@@ -253,17 +252,20 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
-            ttl: self.ttl,
+            //ttl: self.ttl,
             payload: [1; ECHO_PAYLOAD_SIZE],
         };
 
-        // Set TTL for the echo file
+        /* TODO : Set TTL for the echo file
+        The icmp:echo scheme might not support setting the TTL this way
+        resulting in EINVAL (Invalid Argument).
         let ttl_path = format!("icmp:echo/{}/ttl", self.remote_host);
         let ttl_fd = Fd::open(&ttl_path, flag::O_WRONLY, 0).context("Failed to open TTL file")?;
         ttl_fd.write(&[self.ttl])?;
+        */
 
         let _ = self.echo_file.write(&payload)?;
-        let _ = self.echo_file.write(&payload)?;
+
         let mut timeout_time = *time;
 
         timeout_time.tv_sec += PING_TIMEOUT_S;
@@ -310,12 +312,4 @@ impl Ping {
         }
     }
 
-    /*   fn get_transmitted(&self) -> u16 {
-            self.seq
-        }
-
-        fn get_received(&self) -> usize {
-            self.received
-        }
-    */
 }

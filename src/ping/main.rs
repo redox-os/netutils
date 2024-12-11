@@ -2,20 +2,19 @@ mod ping;
 mod stats;
 use ping::Ping;
 
-use std::net::IpAddr;
 extern crate anyhow;
+extern crate clap;
 extern crate event;
 extern crate libredox;
 
-use std::env::args;
 use std::mem;
-
-use std::net::ToSocketAddrs;
-
-use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use event::{user_data, EventFlags, EventQueue};
+use std::net::IpAddr;
+use std::net::ToSocketAddrs;
+
+use clap::{Arg, ArgAction, Command};
 
 use libredox::data::TimeSpec;
 use libredox::errno::EINTR;
@@ -44,27 +43,33 @@ OPTIONS
     -i interval
         Wait interval seconds before sending next packet.
 
-    -t ttl
-        Set the IP Time To Live for outgoing packets (default: 64, range: 1-255).
 "#; /* @MANEND */
 
-const PING_INTERVAL_S: i64 = 1;
 const PING_TIMEOUT_S: i64 = 5;
-const PING_PACKETS_TO_SEND: usize = 4;
 const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
 
 const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
-const _NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
+//const _NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
 
-const DEFAULT_TTL: u8 = 64;
-const MAX_TTL: u8 = 255;
+// TODO : add the ttl feature
+//const DEFAULT_TTL: u8 = 64;
+//const MAX_TTL: u8 = 255;
+//const PING_PACKETS_TO_SEND: usize = 4;
+//const PING_INTERVAL_S: i64 = 1;
 
 fn resolve_host(host: &str) -> Result<IpAddr> {
+    println!("Attempting to resolve host: {}", host);
     match (host, 0).to_socket_addrs()?.next() {
-        Some(addr) => Ok(addr.ip()),
-        None => Err(anyhow!("Failed to resolve remote host's IP address")),
+        Some(addr) => {
+            println!("Resolved address: {}", addr.ip());
+            Ok(addr.ip())
+        }
+        None => {
+            println!("Failed to resolve host: {}", host);
+            Err(anyhow!("Failed to resolve remote host's IP address"))
+        }
     }
 }
 
@@ -88,62 +93,97 @@ fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
     (seconds_diff + nanoseconds_diff) as f32 / 1_000.0
 }
 
+fn parse_args() -> Result<(String, usize, i64)> {
+    let matches = Command::new("ping")
+        .about("send ICMP ECHO_REQUEST to network hosts")
+        .after_help(PING_MAN)
+        .arg(
+            Arg::new("destination")
+                .help("The host to ping (an IPv4 address or hostname)")
+                .required(true)
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new("count")
+                .short('c')
+                .long("count")
+                .value_name("COUNT")
+                .help("Number of packets to send (0 means send until interrupted).")
+                .default_value("4")
+                .num_args(1)
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new("interval")
+                .short('i')
+                .long("interval")
+                .value_name("INTERVAL")
+                .help("Wait interval seconds before sending next packet.")
+                .default_value("1")
+                .num_args(1)
+                .action(ArgAction::Set),
+        )
+        // The TTL feature has been removed because icmp/ttl is not ready.
+        // If needed in the future, uncomment the following code and add the u8 in the function
+        //  .arg(
+        //    Arg::new("ttl")
+        //        .short('t')
+        //        .long("ttl")
+        //        .value_name("TTL")
+        //        .help(&format!(
+        //            "Set the IP Time To Live for outgoing packets (default: {}, range: 1-{})",
+        //            DEFAULT_TTL, MAX_TTL
+        //        ))
+        //        .default_value(DEFAULT_TTL)
+        //        .num_args(1)
+        //        .action(ArgAction::Set),
+        // )
+        // No custom "help" arg here !
+        .get_matches();
+
+    // DEBUG : Retrieve parsed values
+    let remote_host = matches
+        .get_one::<String>("destination")
+        .expect("destination required by clap")
+        .to_string();
+
+    let count_str = matches
+        .get_one::<String>("count")
+        .expect("count should have a default and thus always be present");
+    let count: usize = count_str
+        .parse()
+        .map_err(|e| anyhow!("Invalid packet count for -c: {} ({})", count_str, e))?;
+
+    let interval_str = matches
+        .get_one::<String>("interval")
+        .expect("interval should have a default");
+    let interval: i64 = interval_str
+        .parse()
+        .map_err(|e| anyhow!("Invalid interval value for -i: {} ({})", interval_str, e))?;
+    if interval <= 0 {
+        bail!("Interval must be a positive number");
+    }
+
+    // let ttl_str = matches
+    //    .get_one::<String>("ttl")
+    //    .expect("ttl should have a default");
+    // let ttl: u8 = ttl_str
+    //    .parse()
+    //    .map_err(|e| anyhow!("Invalid TTL value for -t: {} ({})", ttl_str, e))?;
+    // if !(1..=MAX_TTL).contains(&ttl) {
+    //    bail!("TTL must be between 1 and {}", MAX_TTL);
+
+    Ok((remote_host, count, interval))
+}
+
 fn main() -> Result<()> {
-    let mut args = args().skip(1);
-    let mut count = PING_PACKETS_TO_SEND;
-    let mut interval = PING_INTERVAL_S;
-    let mut remote_host = "".to_owned();
-    let mut ttl: Option<u8> = None;
+    // Parsing the command line
+    let (remote_host, count, interval) = parse_args()?;
 
-    while let Some(arg) = args.next() {
-        if arg == "--help" || arg == "-h" {
-            println!("{}", PING_MAN);
-            return Ok(());
-        } else if arg.starts_with("-i") {
-            let value = if arg.len() > 2 {
-                // Option value concatenated directly to the flag, e.g., "-i34"
-                arg[2..].to_string()
-            } else {
-                // Option value provided as next argument
-                args.next()
-                    .ok_or_else(|| anyhow!("No argument to -i option"))?
-            };
-            interval =
-                i64::from_str(&value).map_err(|e| anyhow!("{e}: Invalid argument to -i option"))?;
-            if interval <= 0 {
-                bail!("Interval can't be less or equal to 0");
-            }
-        } else if arg.starts_with("-t") {
-            let value = if arg.len() > 2 {
-                arg[2..].to_string()
-            } else {
-                args.next()
-                    .ok_or_else(|| anyhow!("No argument to -t option"))?
-            };
-            let parsed_ttl =
-                u8::from_str(&value).map_err(|e| anyhow!("{e}: Invalid argument to -t option"))?;
-
-            if parsed_ttl == 0 || parsed_ttl > MAX_TTL {
-                bail!("TTL must be between 1 and 255");
-            }
-            ttl = Some(parsed_ttl);
-        } else if arg.starts_with("-c") {
-            let value = if arg.len() > 2 {
-                // Option value concatenated directly to the flag, e.g., "-c34"
-                arg[2..].to_string()
-            } else {
-                // Option value provided as next argument
-                args.next()
-                    .ok_or_else(|| anyhow!("No argument to -c option"))?
-            };
-            count = usize::from_str(&value)
-                .map_err(|e| anyhow!("{e}: Invalid argument to -c option"))?;
-        } else {
-            if remote_host.is_empty() {
-                remote_host = arg.to_owned();
-            } else {
-                bail!("Too many hosts to ping");
-            }
+    user_data! {
+        enum EventSource {
+            Echo,
+            Time,
         }
     }
 
@@ -165,19 +205,12 @@ fn main() -> Result<()> {
     let time_fd = Fd::open(&time_path, flag::O_RDWR, 0)
         .map_err(|_| anyhow!("Can't open path {}", time_path))?;
 
-    user_data! {
-        enum EventSource {
-            Echo,
-            Time,
-        }
-    }
-
     let event_queue = EventQueue::<EventSource>::new().context("Failed to create event queue")?;
 
     event_queue.subscribe(echo_fd.raw(), EventSource::Echo, EventFlags::READ)?;
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
-    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd,ttl);
+    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
 
     // Send the first ping immediately
     let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
@@ -187,6 +220,7 @@ fn main() -> Result<()> {
     // Schedule the next time event
     let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
     let time = libredox::data::timespec_from_mut_bytes(&mut buf);
+
     time.tv_sec = current_time.tv_sec + interval;
     time.tv_nsec = current_time.tv_nsec;
     ping.time_file
