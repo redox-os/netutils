@@ -14,7 +14,7 @@ use anyhow::{bail, Context, Result};
 use std::cmp::Ordering;
 use std::fmt;
 
-//use DEFAULT_TTL;
+//use DEFAULT_TTL;  // TODO : TTL
 use ECHO_PAYLOAD_SIZE;
 
 use time_diff_ms;
@@ -92,10 +92,6 @@ impl Ord for OrderedTimeSpec {
 impl PartialOrd for OrderedTimeSpec {
     /// Provides a partial ordering for `OrderedTimeSpec` by delegating to `Ord`.
     ///
-    /// `PartialOrd` is required for types that can be compared, but not all
-    /// comparisons must yield a result. For `OrderedTimeSpec`, a total ordering
-    /// exists (via `Ord`), so `partial_cmp` always returns `Some(Ordering)`.
-    ///
     /// This wraps the result of `cmp` in `Some`.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other)) // Delegate to `cmp`, as total ordering exists
@@ -137,7 +133,7 @@ pub struct Ping {
     pub remote_host: IpAddr,
     pub time_file: Fd,
     pub echo_file: Fd,
-    pub seq: u16, // Changed from usize to u16, (max 65 535, ICMP spec)
+    pub seq: u16, // Changed from usize to u16 (max 65 535, ICMP spec)
     pub received: usize,
     //We replace the Vec with BTreeMap and reduce visibility here
     pub(crate) waiting_for: BTreeMap<OrderedTimeSpec, u16>,
@@ -160,7 +156,7 @@ impl Ping {
             remote_host,
             echo_file,
             time_file,
-            seq: 0, // still 0 in u16
+            seq: 0,
             received: 0,
             // Initialize as a BTreeMap
             waiting_for: BTreeMap::new(),
@@ -252,7 +248,7 @@ impl Ping {
         let payload = EchoPayload {
             seq: self.seq as u16,
             timestamp: *time,
-            //ttl: self.ttl,
+            // ttl: self.ttl,
             payload: [1; ECHO_PAYLOAD_SIZE],
         };
 
@@ -302,7 +298,7 @@ impl Ping {
     }
 
     fn is_finished(&self) -> Result<Option<()>> {
-        if self.packets_to_send != 0
+        if self.packets_to_send > 0
             && usize::from(self.seq) == self.packets_to_send
             && self.waiting_for.is_empty()
         {
@@ -311,5 +307,4 @@ impl Ping {
             Ok(None)
         }
     }
-
 }

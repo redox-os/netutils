@@ -7,19 +7,18 @@ extern crate clap;
 extern crate event;
 extern crate libredox;
 
-use std::mem;
-
 use anyhow::{anyhow, bail, Context, Result};
+use clap::{Arg, ArgAction, Command};
 use event::{user_data, EventFlags, EventQueue};
+use std::mem;
 use std::net::IpAddr;
 use std::net::ToSocketAddrs;
-
-use clap::{Arg, ArgAction, Command};
 
 use libredox::data::TimeSpec;
 use libredox::errno::EINTR;
 use libredox::{flag, Fd};
 
+/*
 static PING_MAN: &'static str = /* @MANSTART{ping} */
     r#"
 NAME
@@ -43,7 +42,7 @@ OPTIONS
     -i interval
         Wait interval seconds before sending next packet.
 
-"#; /* @MANEND */
+"#; /* @MANEND */ */
 
 const PING_TIMEOUT_S: i64 = 5;
 const ECHO_PAYLOAD_SIZE: usize = 40;
@@ -51,7 +50,7 @@ const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
 
 const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
-//const _NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
+//const NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
 
 // TODO : add the ttl feature
 //const DEFAULT_TTL: u8 = 64;
@@ -60,12 +59,8 @@ const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
 //const PING_INTERVAL_S: i64 = 1;
 
 fn resolve_host(host: &str) -> Result<IpAddr> {
-    println!("Attempting to resolve host: {}", host);
     match (host, 0).to_socket_addrs()?.next() {
-        Some(addr) => {
-            println!("Resolved address: {}", addr.ip());
-            Ok(addr.ip())
-        }
+        Some(addr) => Ok(addr.ip()),
         None => {
             println!("Failed to resolve host: {}", host);
             Err(anyhow!("Failed to resolve remote host's IP address"))
@@ -96,7 +91,7 @@ fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
 fn parse_args() -> Result<(String, usize, i64)> {
     let matches = Command::new("ping")
         .about("send ICMP ECHO_REQUEST to network hosts")
-        .after_help(PING_MAN)
+        //.after_help(PING_MAN)
         .arg(
             Arg::new("destination")
                 .help("The host to ping (an IPv4 address or hostname)")
@@ -123,6 +118,7 @@ fn parse_args() -> Result<(String, usize, i64)> {
                 .num_args(1)
                 .action(ArgAction::Set),
         )
+        // TODO : TTL
         // The TTL feature has been removed because icmp/ttl is not ready.
         // If needed in the future, uncomment the following code and add the u8 in the function
         //  .arg(
@@ -138,10 +134,9 @@ fn parse_args() -> Result<(String, usize, i64)> {
         //        .num_args(1)
         //        .action(ArgAction::Set),
         // )
-        // No custom "help" arg here !
+        //
         .get_matches();
 
-    // DEBUG : Retrieve parsed values
     let remote_host = matches
         .get_one::<String>("destination")
         .expect("destination required by clap")
@@ -164,6 +159,7 @@ fn parse_args() -> Result<(String, usize, i64)> {
         bail!("Interval must be a positive number");
     }
 
+    // TODO : TTL
     // let ttl_str = matches
     //    .get_one::<String>("ttl")
     //    .expect("ttl should have a default");
@@ -197,19 +193,30 @@ fn main() -> Result<()> {
         remote_host, remote_host, data_size, total_size
     );
 
+    // Create the path to the ICMP echo file for the remote host
     let icmp_path = format!("icmp:echo/{}", remote_host);
+
+    // Open the ICMP echo file in read-write, non-blocking mode
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
         .map_err(|_| anyhow!("Can't open path {}", icmp_path))?;
 
+    // Create the path to the monotonic clock file
     let time_path = format!("time:{}", flag::CLOCK_MONOTONIC);
+
+    // Open the monotonic clock file in read-write mode
     let time_fd = Fd::open(&time_path, flag::O_RDWR, 0)
         .map_err(|_| anyhow!("Can't open path {}", time_path))?;
 
+    // Create a new event queue
     let event_queue = EventQueue::<EventSource>::new().context("Failed to create event queue")?;
 
+    // Subscribe the event queue to read events from the ICMP echo file
     event_queue.subscribe(echo_fd.raw(), EventSource::Echo, EventFlags::READ)?;
+
+    // Subscribe the event queue to read events from the monotonic clock file
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
+    // Create a new Ping instance with the specified parameters
     let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
 
     // Send the first ping immediately
