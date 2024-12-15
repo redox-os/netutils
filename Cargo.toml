@@ -69,6 +69,8 @@ url = "1.7.2"
 libredox = "0.1"
 # for ifconfig
 regex = "1"
+#for ping
+clap = "4.5"
 
 # [dependencies.hyper]
 # version = "0.12.27"
