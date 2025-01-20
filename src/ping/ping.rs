@@ -226,17 +226,32 @@ impl Ping {
     }
 
     pub fn on_time_event(&mut self) -> Result<Option<()>> {
+        //  Read from the 'time:' file just to consume the alarm event,
+        //  but do *not* treat it as the current time for RTT.
         let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
-        if self.time_file.read(&mut buf)? < mem::size_of::<TimeSpec>() {
-            bail!("Failed to read from time file");
+        self.time_file.read(&mut buf)?; // discard
+
+        // Get the real monotonic time for sending a new ping & timeouts
+        let now = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+            .context("Failed to get the current time")?;
+        self.send_ping(&now)?;
+        self.check_timeouts(&now)?;
+
+        // Schedule the *next* alarm event at now + self.interval
+        let mut alarm_time = now;
+        alarm_time.tv_sec += self.interval;
+
+        // Serialize alarm_time into a byte buffer and write it
+        let mut alarm_buf = [0_u8; mem::size_of::<TimeSpec>()];
+        {
+            let alarm_spec = libredox::data::timespec_from_mut_bytes(&mut alarm_buf);
+            *alarm_spec = alarm_time;
         }
-        let time = libredox::data::timespec_from_mut_bytes(&mut buf);
-        self.send_ping(&time)?;
-        self.check_timeouts(&time)?;
-        time.tv_sec += self.interval;
         self.time_file
-            .write(&buf)
-            .context("Failed to write to time file")?;
+            .write(&alarm_buf)
+            .context("Failed to write the next alarm time")?;
+
+        // If we've sent all packets and have no outstanding replies, finish
         self.is_finished()
     }
 
