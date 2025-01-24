@@ -1,23 +1,23 @@
 extern crate netutils;
 
 use netutils::MacAddr;
-use std::{env, process, time};
-use std::io::{self, Read, Write};
 use std::fs::{File, OpenOptions};
+use std::io::{self, Read, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
+use std::{env, process, time};
 
 use dhcp::Dhcp;
 
 mod dhcp;
 
 macro_rules! try_fmt {
-    ($e:expr, $m:expr) =>(
+    ($e:expr, $m:expr) => {
         match $e {
             Ok(ok) => ok,
             Err(err) => return Err(format!("{}: {}", $m, err)),
         }
-    )
+    };
 }
 
 fn get_cfg_value(path: &str) -> Result<String, String> {
@@ -36,7 +36,11 @@ fn get_iface_cfg_value(iface: &str, cfg: &str) -> Result<String, String> {
 
 fn set_cfg_value(path: &str, value: &str) -> Result<(), String> {
     let path = format!("/scheme/netcfg/{}", path);
-    let mut file = OpenOptions::new().read(false).write(true).create(false).open(&path)
+    let mut file = OpenOptions::new()
+        .read(false)
+        .write(true)
+        .create(false)
+        .open(&path)
         .map_err(|_| format!("Can't open {}", path))?;
     file.write(value.as_bytes())
         .map(|_| ())
@@ -70,7 +74,8 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
     let tid = try_fmt!(
         time::SystemTime::now().duration_since(time::UNIX_EPOCH),
         "failed to get time"
-    ).subsec_nanos();
+    )
+    .subsec_nanos();
 
     let socket = try_fmt!(UdpSocket::bind(("0.0.0.0", 68)), "failed to bind udp");
     try_fmt!(
@@ -125,13 +130,12 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
         for (s, d) in [
             // DHCP Message Type (Discover)
-            53,
-            1,
-            1,
-
-            // End
-            255
-        ].iter().zip(discover.options.iter_mut()) {
+            53, 1, 1, // End
+            255,
+        ]
+        .iter()
+        .zip(discover.options.iter_mut())
+        {
             *d = *s;
         }
 
@@ -159,84 +163,95 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         );
     }
 
+    let mut subnet_option = None;
+    let mut router_option = None;
+    let mut dns_option = None;
+    let mut server_id_option = None;
     {
-        let mut subnet_option = None;
-        let mut router_option = None;
-        let mut dns_option = None;
-
         let mut options = offer.options.iter();
         while let Some(option) = options.next() {
             match *option {
                 0 => (),
                 255 => break,
-                _ => if let Some(len) = options.next() {
-                    if *len as usize <= options.as_slice().len() {
-                        let data = &options.as_slice()[..*len as usize];
-                        for _data_i in 0..*len {
-                            options.next();
-                        }
-                        match *option {
-                            1 => {
-                                if !quiet {
-                                    println!("DHCP: Subnet Mask: {:?}", data);
-                                }
-                                if data.len() == 4 && subnet_option.is_none() {
-                                    subnet_option = Some(Vec::from(data));
-                                }
+                _ => {
+                    if let Some(len) = options.next() {
+                        if *len as usize <= options.as_slice().len() {
+                            let data = &options.as_slice()[..*len as usize];
+                            for _data_i in 0..*len {
+                                options.next();
                             }
-                            3 => {
-                                if !quiet {
-                                    println!("DHCP: Router: {:?}", data);
+                            match *option {
+                                1 => {
+                                    if !quiet {
+                                        println!("DHCP: Subnet Mask: {:?}", data);
+                                    }
+                                    if data.len() == 4 && subnet_option.is_none() {
+                                        subnet_option = Some(Vec::from(data));
+                                    }
                                 }
-                                if data.len() == 4 && router_option.is_none() {
-                                    router_option = Some(Vec::from(data));
+                                3 => {
+                                    if !quiet {
+                                        println!("DHCP: Router: {:?}", data);
+                                    }
+                                    if data.len() == 4 && router_option.is_none() {
+                                        router_option = Some(Vec::from(data));
+                                    }
                                 }
-                            }
-                            6 => {
-                                if !quiet {
-                                    println!("DHCP: Domain Name Server: {:?}", data);
+                                6 => {
+                                    if !quiet {
+                                        println!("DHCP: Domain Name Server: {:?}", data);
+                                    }
+                                    if data.len() == 4 && dns_option.is_none() {
+                                        dns_option = Some(Vec::from(data));
+                                    }
                                 }
-                                if data.len() == 4 && dns_option.is_none() {
-                                    dns_option = Some(Vec::from(data));
+                                51 => {
+                                    if !quiet {
+                                        println!("DHCP: Lease Time: {:?}", data);
+                                    }
                                 }
-                            }
-                            51 => {
-                                if !quiet {
-                                    println!("DHCP: Lease Time: {:?}", data);
+                                53 => {
+                                    if !quiet {
+                                        println!("DHCP: Message Type: {:?}", data);
+                                    }
                                 }
-                            }
-                            53 => {
-                                if !quiet {
-                                    println!("DHCP: Message Type: {:?}", data);
+                                54 => {
+                                    if !quiet {
+                                        println!("DHCP: Server ID: {:?}", data);
+                                    }
+                                    if data.len() == 4 {
+                                        // Store the server ID
+                                        server_id_option =
+                                            Some([data[0], data[1], data[2], data[3]]);
+                                    }
                                 }
-                            }
-                            54 => {
-                                if !quiet {
-                                    println!("DHCP: Server ID: {:?}", data);
-                                }
-                            }
-                            _ => {
-                                if !quiet {
-                                    println!("DHCP: {}: {:?}", option, data);
+                                _ => {
+                                    if !quiet {
+                                        println!("DHCP: {}: {:?}", option, data);
+                                    }
                                 }
                             }
                         }
                     }
-                },
+                }
             }
         }
 
         let mask_len = if let Some(subnet) = subnet_option {
-            let mut subnet: u32 = (subnet[0] as u32) << 24 | (subnet[1] as u32) << 16 |
-                                  (subnet[2] as u32) << 8 | subnet[3] as u32;
+            let mut subnet: u32 = (subnet[0] as u32) << 24
+                | (subnet[1] as u32) << 16
+                | (subnet[2] as u32) << 8
+                | subnet[3] as u32;
             subnet = !subnet;
             subnet.leading_zeros()
         } else {
             0
         };
 
-        let new_ips = format!("{}.{}.{}.{}/{}\n",
-                              offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3], mask_len);
+        let new_ips = format!(
+            "{}.{}.{}.{}/{}\n",
+            offer.yiaddr[0], offer.yiaddr[1], offer.yiaddr[2], offer.yiaddr[3], mask_len
+        );
         try_fmt!(
             set_iface_cfg_value(iface, "addr/set", &new_ips),
             "failed to set ip"
@@ -248,8 +263,10 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         }
 
         if let Some(router) = router_option {
-            let default_route = format!("default via {}.{}.{}.{}",
-                                        router[0], router[1], router[2], router[3]);
+            let default_route = format!(
+                "default via {}.{}.{}.{}",
+                router[0], router[1], router[2], router[3]
+            );
 
             try_fmt!(
                 set_cfg_value("route/add", &default_route),
@@ -323,12 +340,14 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             options: [0; 308],
         };
 
+        // If the server_id_option was None, use "0.0.0.0"
+        let server_id = server_id_option.unwrap_or([0, 0, 0, 0]);
+
         for (s, d) in [
             // DHCP Message Type (Request)
             53,
             1,
             3,
-
             // Requested IP Address
             50,
             4,
@@ -336,19 +355,18 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             offer.yiaddr[1],
             offer.yiaddr[2],
             offer.yiaddr[3],
-
-            // Server IP Address
+            // Server Identifier - use Option 54 from the Offer
             54,
             4,
-            offer.siaddr[0],
-            offer.siaddr[1],
-            offer.siaddr[2],
-            offer.siaddr[3],
-
+            server_id[0],
+            server_id[1],
+            server_id[2],
+            server_id[3],
             // End
             255,
-        ].iter()
-            .zip(request.options.iter_mut())
+        ]
+        .iter()
+        .zip(request.options.iter_mut())
         {
             *d = *s;
         }
@@ -405,7 +423,8 @@ fn main() {
                 process::exit(1);
             }
             process::exit(0);
-        }).expect("dhcpd: failed to daemonize");
+        })
+        .expect("dhcpd: failed to daemonize");
     } else {
         if let Err(err) = dhcp(iface, quiet) {
             println!("Error {}", err);
