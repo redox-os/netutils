@@ -14,7 +14,6 @@ use anyhow::{bail, Context, Result};
 use std::cmp::Ordering;
 use std::fmt;
 
-//use DEFAULT_TTL;  // TODO : TTL
 use ECHO_PAYLOAD_SIZE;
 
 use time_diff_ms;
@@ -26,7 +25,7 @@ use PING_TIMEOUT_S;
 /// **Note this wrapper type is necessary because `TimeSpec`
 /// (from `libredox` crate) does not implement these traits
 ///
-#[derive(Clone, Copy)] // Allows cheap copying of `OrderedTimeSpec` values
+#[derive(Clone, Copy)] 
 pub struct OrderedTimeSpec(libredox::data::TimeSpec);
 
 impl PartialEq for OrderedTimeSpec {
@@ -34,16 +33,7 @@ impl PartialEq for OrderedTimeSpec {
     ///
     /// Two `OrderedTimeSpec` instances are considered equal if both the
     /// `tv_sec` (seconds) and `tv_nsec` (nanoseconds) fields are equal.
-    ///
-    /// # Example
-    ///
-    /// let a = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 100 });
-    /// let b = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 100 });
-    /// assert!(a == b);
-    ///
-    /// let c = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 200 });
-    /// assert!(a != c);
-    ////
+
     fn eq(&self, other: &Self) -> bool {
         self.0.tv_sec == other.0.tv_sec // Compare seconds
             && self.0.tv_nsec == other.0.tv_nsec // Compare nanoseconds
@@ -53,11 +43,7 @@ impl PartialEq for OrderedTimeSpec {
 impl fmt::Debug for OrderedTimeSpec {
     /// This formats the output as:
     /// `OrderedTimeSpec { tv_sec: <seconds>, tv_nsec: <nanoseconds> }`.
-    ///
-    /// # Example Output
-    /// let a = OrderedTimeSpec(TimeSpec { tv_sec: 10, tv_nsec: 200 });
-    /// println!("{:?}", a); // Output: OrderedTimeSpec { tv_sec: 10, tv_nsec: 200 }
-    ///
+
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -102,7 +88,6 @@ impl PartialOrd for OrderedTimeSpec {
 struct EchoPayload {
     seq: u16,
     timestamp: TimeSpec,
-    //ttl: u8,
     payload: [u8; ECHO_PAYLOAD_SIZE],
 }
 
@@ -133,9 +118,8 @@ pub struct Ping {
     pub remote_host: IpAddr,
     pub time_file: Fd,
     pub echo_file: Fd,
-    pub seq: u16, // Changed from usize to u16 (max 65 535, ICMP spec)
+    pub seq: u16, // TODO : check if ICMP seq > 65 535
     pub received: usize,
-    //We replace the Vec with BTreeMap and reduce visibility here
     pub(crate) waiting_for: BTreeMap<OrderedTimeSpec, u16>,
     pub packets_to_send: usize,
     pub interval: i64,
@@ -150,7 +134,6 @@ impl Ping {
         interval: i64,
         echo_file: Fd,
         time_file: Fd,
-        //ttl: Option<u8>,
     ) -> Ping {
         Ping {
             remote_host,
@@ -158,12 +141,10 @@ impl Ping {
             time_file,
             seq: 0,
             received: 0,
-            // Initialize as a BTreeMap
             waiting_for: BTreeMap::new(),
             packets_to_send,
             interval,
             stats: PingStatistics::new(),
-            //ttl: ttl.unwrap_or(DEFAULT_TTL),
         }
     }
 
@@ -174,7 +155,6 @@ impl Ping {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
-            //ttl: 0,
             payload: [0; ECHO_PAYLOAD_SIZE],
         };
 
@@ -266,14 +246,6 @@ impl Ping {
             // ttl: self.ttl,
             payload: [1; ECHO_PAYLOAD_SIZE],
         };
-
-        /* TODO : Set TTL for the echo file
-        The icmp:echo scheme might not support setting the TTL this way
-        resulting in EINVAL (Invalid Argument).
-        let ttl_path = format!("icmp:echo/{}/ttl", self.remote_host);
-        let ttl_fd = Fd::open(&ttl_path, flag::O_WRONLY, 0).context("Failed to open TTL file")?;
-        ttl_fd.write(&[self.ttl])?;
-        */
 
         let _ = self.echo_file.write(&payload)?;
 

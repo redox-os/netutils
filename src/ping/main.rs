@@ -1,3 +1,4 @@
+/// main.rs
 mod ping;
 mod stats;
 use ping::Ping;
@@ -25,7 +26,7 @@ NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
 SYNOPSIS
-    ping [-h | --help] [-c count] [-i interval] [-t ttl] destination
+    ping [-h | --help] [-c count] [-i interval] destination
 
 DESCRIPTION
     ping sends ICMP ECHO_REQUEST packets to the specified destination host
@@ -49,14 +50,8 @@ const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
 
-const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
-//const NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
-
-// TODO : add the ttl feature
-//const DEFAULT_TTL: u8 = 64;
-//const MAX_TTL: u8 = 255;
-//const PING_PACKETS_TO_SEND: usize = 4;
-//const PING_INTERVAL_S: i64 = 1;
+const MICROSECONDS_PER_SECOND: i64 = 1_000_000;
+const NANOSECONDS_PER_MICROSECOND: i64 = 1_000;
 
 fn resolve_host(host: &str) -> Result<IpAddr> {
     match (host, 0).to_socket_addrs()?.next() {
@@ -68,30 +63,17 @@ fn resolve_host(host: &str) -> Result<IpAddr> {
     }
 }
 
-/// Computes the difference between `from` and `to` in milliseconds,
-/// taking into account both the seconds (`tv_sec`) and nanoseconds (`tv_nsec`) fields
-/// of the `TimeSpec` structure.
-///
-/// # Notes
-/// - The result is signed, meaning it can be negative if `from` is after `to`.
-/// - This assumes that `tv_nsec` values are less than 1 second (valid for `TimeSpec`).
-///
-/// # Example
-/// let from = TimeSpec { tv_sec: 10, tv_nsec: 500_000_000 }; // 10.5 seconds
-/// let to = TimeSpec { tv_sec: 12, tv_nsec: 0 };            // 12.0 seconds
-/// assert_eq!(time_diff_ms(&from, &to), 1500.0);            // 1.5 seconds = 1500 ms
-///
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    let seconds_diff = (to.tv_sec - from.tv_sec) * 1_000_000;
-    let nanoseconds_diff = ((to.tv_nsec - from.tv_nsec) as i64) / MICROSECONDS_PER_MILLISECOND;
+    let seconds_diff = (to.tv_sec - from.tv_sec) * MICROSECONDS_PER_SECOND;
+    let nanoseconds_diff = (to.tv_nsec - from.tv_nsec) as i64 / NANOSECONDS_PER_MICROSECOND;
 
+    // Total time in milliseconds
     (seconds_diff + nanoseconds_diff) as f32 / 1_000.0
 }
 
 fn parse_args() -> Result<(String, usize, i64)> {
     let matches = Command::new("ping")
         .about("send ICMP ECHO_REQUEST to network hosts")
-        //.after_help(PING_MAN)
         .arg(
             Arg::new("destination")
                 .help("The host to ping (an IPv4 address or hostname)")

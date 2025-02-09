@@ -1,4 +1,4 @@
-///stats.rs
+/// stats.rs
 use std::net::IpAddr;
 
 pub struct PingStatistics {
