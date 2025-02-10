@@ -165,6 +165,9 @@ fn main() -> Result<()> {
         }
     }
 
+    let pid = libredox::call::getpid()?;
+    let identifier = (pid % (u16::MAX as usize)) as u16; // Simple identifier based on PID
+
     let remote_host = resolve_host(&remote_host)?;
 
     let data_size = ECHO_PAYLOAD_SIZE;
@@ -198,20 +201,26 @@ fn main() -> Result<()> {
     // Subscribe the event queue to read events from the monotonic clock file
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
-    // Create a new Ping instance with the specified parameters
-    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
+    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd, identifier);
 
     // Send the first ping immediately
     let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
         .context("Failed to get the current time")?;
     ping.send_ping(&current_time)?;
 
-    // Schedule the next time event
+    // Schedule the next time event using TimeSpec
+    let interval_ts = Ping::interval_to_timespec(interval);
     let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
     let time = libredox::data::timespec_from_mut_bytes(&mut buf);
-
-    time.tv_sec = current_time.tv_sec + interval;
-    time.tv_nsec = current_time.tv_nsec;
+    *time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+        .context("Failed to get current time")?;
+    time.tv_sec += interval_ts.tv_sec;
+    time.tv_nsec += interval_ts.tv_nsec;
+    // Handle nanosecond overflow
+    if time.tv_nsec >= 1_000_000_000 {
+        time.tv_sec += 1;
+        time.tv_nsec -= 1_000_000_000;
+    }
     ping.time_file
         .write(&buf)
         .context("Failed to write to time file")?;
