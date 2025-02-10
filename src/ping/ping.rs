@@ -157,35 +157,27 @@ impl Ping {
             },
             payload: [0; ECHO_PAYLOAD_SIZE],
         };
-
+    
         let readed = match self.echo_file.read(&mut payload) {
             Ok(cnt) => cnt,
             Err(e) if e.is_wouldblock() => 0,
             Err(e) => return Err(e).context("Failed to read from echo file"),
         };
-
-        if self.received > 0 {
-            let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
-                .context("Failed to get the current time")?;
-            let rtt = time_diff_ms(&payload.timestamp, &time);
-            self.stats.record_received(rtt);
-        } else {
-            self.stats.record_error();
-        }
-
+    
         if readed == 0 {
             return Ok(None);
         }
-
+    
         if readed < mem::size_of::<EchoPayload>() {
             bail!("Not enough data in the echo file");
         }
-
+    
         let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
             .context("Failed to get the current time")?;
-
+        let rtt = time_diff_ms(&payload.timestamp, &time);
+    
         let remote_host = self.remote_host;
-
+    
         let mut received = 0;
         self.waiting_for.retain(|_ts, &mut seq| {
             if seq as u16 == payload.seq {
@@ -194,14 +186,22 @@ impl Ping {
                     "From {} icmp_seq={} time={}ms",
                     remote_host,
                     seq,
-                    time_diff_ms(&payload.timestamp, &time)
+                    rtt
                 );
                 false
             } else {
                 true
             }
         });
+    
+        if received > 0 {
+            self.stats.record_received(rtt);
+        } else {
+            self.stats.record_error();
+        }
+    
         self.received += received;
+    
         self.is_finished()
     }
 
