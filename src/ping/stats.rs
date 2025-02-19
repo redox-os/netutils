@@ -1,4 +1,3 @@
-///stats.rs
 use std::net::IpAddr;
 
 pub struct PingStatistics {
@@ -38,8 +37,9 @@ impl PingStatistics {
         self.min_rtt = Some(self.min_rtt.map_or(rtt, |current| current.min(rtt)));
         self.max_rtt = Some(self.max_rtt.map_or(rtt, |current| current.max(rtt)));
 
-        // Recalculate average
-        self.avg_rtt = self.rtts.iter().sum::<f32>() / self.rtts.len() as f32;
+        // Incrementally update the average RTT.
+        let count = self.total_received as f32;
+        self.avg_rtt = self.avg_rtt + (rtt - self.avg_rtt) / count;
     }
 
     pub fn record_error(&mut self) {
