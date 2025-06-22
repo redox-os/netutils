@@ -194,14 +194,14 @@ fn main() -> Result<()> {
     );
 
     // Create the path to the ICMP echo file for the remote host
-    let icmp_path = format!("icmp:echo/{}", remote_host);
+    let icmp_path = format!("/scheme/icmp/echo/{}", remote_host);
 
     // Open the ICMP echo file in read-write, non-blocking mode
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
         .map_err(|_| anyhow!("Can't open path {}", icmp_path))?;
 
     // Create the path to the monotonic clock file
-    let time_path = format!("time:{}", flag::CLOCK_MONOTONIC);
+    let time_path = format!("/scheme/time/{}", flag::CLOCK_MONOTONIC);
 
     // Open the monotonic clock file in read-write mode
     let time_fd = Fd::open(&time_path, flag::O_RDWR, 0)
