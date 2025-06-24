@@ -25,7 +25,7 @@ NAME
     ping - send ICMP ECHO_REQUEST to network hosts
 
 SYNOPSIS
-    ping [-h | --help] [-c count] [-i interval] [-t ttl] destination
+    ping [-h | --help] [-c count] [-i interval] destination
 
 DESCRIPTION
     ping sends ICMP ECHO_REQUEST packets to the specified destination host
@@ -48,9 +48,7 @@ const PING_TIMEOUT_S: i64 = 5;
 const ECHO_PAYLOAD_SIZE: usize = 40;
 const IP_HEADER_SIZE: usize = 20;
 const ICMP_HEADER_SIZE: usize = 8;
-
-const MICROSECONDS_PER_MILLISECOND: i64 = 1_000;
-//const NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
+const NANOS_PER_SEC: i64 = 1_000_000_000;
 
 // TODO : add the ttl feature
 //const DEFAULT_TTL: u8 = 64;
@@ -69,26 +67,21 @@ fn resolve_host(host: &str) -> Result<IpAddr> {
 }
 
 /// Computes the difference between `from` and `to` in milliseconds,
-/// taking into account both the seconds (`tv_sec`) and nanoseconds (`tv_nsec`) fields
-/// of the `TimeSpec` structure.
-///
-/// # Notes
-/// - The result is signed, meaning it can be negative if `from` is after `to`.
-/// - This assumes that `tv_nsec` values are less than 1 second (valid for `TimeSpec`).
-///
-/// # Example
-/// let from = TimeSpec { tv_sec: 10, tv_nsec: 500_000_000 }; // 10.5 seconds
-/// let to = TimeSpec { tv_sec: 12, tv_nsec: 0 };            // 12.0 seconds
-/// assert_eq!(time_diff_ms(&from, &to), 1500.0);            // 1.5 seconds = 1500 ms
-///
 fn time_diff_ms(from: &TimeSpec, to: &TimeSpec) -> f32 {
-    let seconds_diff = (to.tv_sec - from.tv_sec) * 1_000_000;
-    let nanoseconds_diff = ((to.tv_nsec - from.tv_nsec) as i64) / MICROSECONDS_PER_MILLISECOND;
+    const NANOS_PER_MILLI: i64 = 1_000_000;
 
-    (seconds_diff + nanoseconds_diff) as f32 / 1_000.0
+    // Convert everything to nanoseconds first
+    let from_ns = (from.tv_sec as i64) * NANOS_PER_SEC + (from.tv_nsec as i64);
+    let to_ns = (to.tv_sec as i64) * NANOS_PER_SEC + (to.tv_nsec as i64);
+
+    // Calculate difference in nanoseconds
+    let diff_ns = to_ns - from_ns;
+
+    // Convert to milliseconds with floating point precision
+    (diff_ns as f32) / (NANOS_PER_MILLI as f32)
 }
 
-fn parse_args() -> Result<(String, usize, i64)> {
+fn parse_args() -> Result<(String, usize, f64)> {
     let matches = Command::new("ping")
         .about("send ICMP ECHO_REQUEST to network hosts")
         //.after_help(PING_MAN)
@@ -145,6 +138,7 @@ fn parse_args() -> Result<(String, usize, i64)> {
     let count_str = matches
         .get_one::<String>("count")
         .expect("count should have a default and thus always be present");
+
     let count: usize = count_str
         .parse()
         .map_err(|e| anyhow!("Invalid packet count for -c: {} ({})", count_str, e))?;
@@ -152,25 +146,26 @@ fn parse_args() -> Result<(String, usize, i64)> {
     let interval_str = matches
         .get_one::<String>("interval")
         .expect("interval should have a default");
-    let interval: i64 = interval_str
+
+    let interval: f64 = interval_str
         .parse()
         .map_err(|e| anyhow!("Invalid interval value for -i: {} ({})", interval_str, e))?;
-    if interval <= 0 {
+    if interval <= 0.0 {
         bail!("Interval must be a positive number");
     }
 
-    // TODO : TTL
-    // let ttl_str = matches
-    //    .get_one::<String>("ttl")
-    //    .expect("ttl should have a default");
-    // let ttl: u8 = ttl_str
-    //    .parse()
-    //    .map_err(|e| anyhow!("Invalid TTL value for -t: {} ({})", ttl_str, e))?;
-    // if !(1..=MAX_TTL).contains(&ttl) {
-    //    bail!("TTL must be between 1 and {}", MAX_TTL);
-
     Ok((remote_host, count, interval))
 }
+
+// TODO : TTL
+// let ttl_str = matches
+//    .get_one::<String>("ttl")
+//    .expect("ttl should have a default");
+// let ttl: u8 = ttl_str
+//    .parse()
+//    .map_err(|e| anyhow!("Invalid TTL value for -t: {} ({})", ttl_str, e))?;
+// if !(1..=MAX_TTL).contains(&ttl) {
+//    bail!("TTL must be between 1 and {}", MAX_TTL);
 
 fn main() -> Result<()> {
     // Parsing the command line
@@ -183,10 +178,12 @@ fn main() -> Result<()> {
         }
     }
 
+    let pid = libredox::call::getpid()?;
+    let identifier = (pid % (u16::MAX as usize)) as u16; // Simple identifier based on PID
     let remote_host = resolve_host(&remote_host)?;
-
     let data_size = ECHO_PAYLOAD_SIZE;
     let total_size = data_size + IP_HEADER_SIZE + ICMP_HEADER_SIZE;
+
     // Print the line similar to standard ping output
     println!(
         "PING {} ({}) {}({}) bytes of data.",
@@ -216,20 +213,23 @@ fn main() -> Result<()> {
     // Subscribe the event queue to read events from the monotonic clock file
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
-    // Create a new Ping instance with the specified parameters
-    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
+    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd, identifier);
 
-    // Send the first ping immediately
-    let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
-        .context("Failed to get the current time")?;
-    ping.send_ping(&current_time)?;
-
-    // Schedule the next time event
+    // Schedule the next time event using TimeSpec
+    let interval_ts = Ping::interval_to_timespec(interval);
     let mut buf = [0_u8; mem::size_of::<TimeSpec>()];
     let time = libredox::data::timespec_from_mut_bytes(&mut buf);
 
-    time.tv_sec = current_time.tv_sec + interval;
-    time.tv_nsec = current_time.tv_nsec;
+    *time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+        .context("Failed to get current time")?;
+    time.tv_sec += interval_ts.tv_sec;
+    time.tv_nsec += interval_ts.tv_nsec;
+
+    // Handle nanosecond overflow
+    if time.tv_nsec >= NANOS_PER_SEC {
+        time.tv_sec += 1;
+        time.tv_nsec -= NANOS_PER_SEC;
+    }
     ping.time_file
         .write(&buf)
         .context("Failed to write to time file")?;
