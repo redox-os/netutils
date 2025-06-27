@@ -1,4 +1,3 @@
-use std::io::{stderr, Write};
 use std::net::ToSocketAddrs;
 use std::{env, process};
 
@@ -8,7 +7,7 @@ fn main() {
             println!("{}", addr.ip());
         }
     } else {
-        write!(stderr(), "dns: no hostname provided\n").unwrap();
+        eprintln!("dns: no hostname provided\n");
         process::exit(1);
     }
 }

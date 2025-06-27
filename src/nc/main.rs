@@ -4,7 +4,7 @@ use std::io::{self, Write};
 mod modes;
 use modes::*;
 
-static MAN_PAGE: &'static str = /* @MANSTART{nc} */
+static MAN_PAGE: &str = /* @MANSTART{nc} */
     r#"
 NAME
     nc - Concatenate and redirect sockets
@@ -39,13 +39,13 @@ enum NcMode {
 }
 
 fn main() {
-    let mut args = env::args().skip(1);
+    let args = env::args().skip(1);
     let mut hostname = "".to_string();
     let mut proto = TransportProtocol::Tcp;
     let mut mode = NcMode::Connect;
     let mut stdout = io::stdout();
 
-    while let Some(arg) = args.next() {
+    for arg in args {
         if arg.starts_with('-') {
             match arg.as_str() {
                 "-h" | "--help" => {
@@ -69,22 +69,22 @@ fn main() {
     match (mode, proto) {
         (NcMode::Connect, TransportProtocol::Tcp) => {
             connect_tcp(&hostname).unwrap_or_else(|e| {
-                println!("nc error: {}", e);
+                println!("nc error: {e}");
             });
         }
         (NcMode::Listen, TransportProtocol::Tcp) => {
             listen_tcp(&hostname).unwrap_or_else(|e| {
-                println!("nc error: {}", e);
+                println!("nc error: {e}");
             });
         }
         (NcMode::Connect, TransportProtocol::Udp) => {
             connect_udp(&hostname).unwrap_or_else(|e| {
-                println!("nc error: {}", e);
+                println!("nc error: {e}");
             });
         }
         (NcMode::Listen, TransportProtocol::Udp) => {
             listen_udp(&hostname).unwrap_or_else(|e| {
-                println!("nc error: {}", e);
+                println!("nc error: {e}");
             });
         }
     }

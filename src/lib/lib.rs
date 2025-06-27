@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Result, Write};
-use std::{mem, slice, u16, u8};
+use std::{mem, slice};
 
 pub use ip::Ipv4Addr;
 pub use mac::MacAddr;
@@ -12,13 +12,13 @@ pub mod udp;
 
 pub fn getcfg(key: &str) -> Result<String> {
     let mut value = String::new();
-    let mut file = File::open(&format!("/etc/net/{}", key))?;
+    let mut file = File::open(format!("/etc/net/{key}"))?;
     file.read_to_string(&mut value)?;
     Ok(value.trim().to_string())
 }
 
 pub fn setcfg(key: &str, value: &str) -> Result<()> {
-    let mut file = File::create(&format!("/etc/net/{}", key))?;
+    let mut file = File::create(format!("/etc/net/{key}"))?;
     file.write(value.as_bytes())?;
     file.set_len(value.len() as u64)?;
     file.sync_all()?;
@@ -27,7 +27,7 @@ pub fn setcfg(key: &str, value: &str) -> Result<()> {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct n16(u16);
 
 impl n16 {
@@ -46,7 +46,7 @@ impl n16 {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct n32(u32);
 
 impl n32 {
@@ -95,7 +95,7 @@ impl Checksum {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ArpHeader {
     pub htype: n16,
     pub ptype: n16,
@@ -141,7 +141,7 @@ impl Arp {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct EthernetIIHeader {
     pub dst: MacAddr,
     pub src: MacAddr,
@@ -181,7 +181,7 @@ impl EthernetII {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Ipv4Header {
     pub ver_hlen: u8,
     pub services: u8,
@@ -226,7 +226,7 @@ impl Ipv4 {
                     && header_len <= header.len.get() as usize
                 {
                     return Some(Ipv4 {
-                        header: header,
+                        header,
                         options: bytes[mem::size_of::<Ipv4Header>()..header_len].to_vec(),
                         data: bytes[header_len..header.len.get() as usize].to_vec(),
                     });

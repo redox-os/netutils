@@ -1,5 +1,5 @@
 use super::{n16, n32, Checksum};
-use std::{mem, slice, u8};
+use std::{mem, slice};
 
 use ip::Ipv4Addr;
 
@@ -10,7 +10,7 @@ pub const TCP_PSH: u16 = 1 << 3;
 pub const TCP_ACK: u16 = 1 << 4;
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct TcpHeader {
     pub src: n16,
     pub dst: n16,
@@ -58,7 +58,7 @@ impl Tcp {
 
                 if header_len >= mem::size_of::<TcpHeader>() && header_len <= bytes.len() {
                     return Some(Tcp {
-                        header: header,
+                        header,
                         options: bytes[mem::size_of::<TcpHeader>()..header_len].to_vec(),
                         data: bytes[header_len..bytes.len()].to_vec(),
                     });

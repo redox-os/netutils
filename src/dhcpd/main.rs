@@ -2,7 +2,7 @@ extern crate netutils;
 
 use netutils::MacAddr;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 use std::{env, process, time};
@@ -21,36 +21,36 @@ macro_rules! try_fmt {
 }
 
 fn get_cfg_value(path: &str) -> Result<String, String> {
-    let path = format!("/scheme/netcfg/{}", path);
-    let mut file = File::open(&path).map_err(|_| format!("Can't open {}", &path))?;
+    let path = format!("/scheme/netcfg/{path}");
+    let mut file = File::open(&path).map_err(|_| format!("Can't open {path}"))?;
     let mut result = String::new();
     file.read_to_string(&mut result)
-        .map_err(|_| format!("Can't read {}", path))?;
+        .map_err(|_| format!("Can't read {path}"))?;
     Ok(result)
 }
 
 fn get_iface_cfg_value(iface: &str, cfg: &str) -> Result<String, String> {
-    let path = format!("ifaces/{}/{}", iface, cfg);
+    let path = format!("ifaces/{iface}/{cfg}");
     get_cfg_value(&path)
 }
 
 fn set_cfg_value(path: &str, value: &str) -> Result<(), String> {
-    let path = format!("/scheme/netcfg/{}", path);
+    let path = format!("/scheme/netcfg/{path}");
     let mut file = OpenOptions::new()
         .read(false)
         .write(true)
         .create(false)
         .open(&path)
-        .map_err(|_| format!("Can't open {}", path))?;
+        .map_err(|_| format!("Can't open {path}"))?;
     file.write(value.as_bytes())
         .map(|_| ())
-        .map_err(|_| format!("Can't write {} to {}", value, path))?;
+        .map_err(|_| format!("Can't write {value} to {path}"))?;
     file.sync_data()
-        .map_err(|_| format!("Can't commit {} to {}", value, path))
+        .map_err(|_| format!("Can't commit {value} to {path}"))
 }
 
 fn set_iface_cfg_value(iface: &str, cfg: &str, value: &str) -> Result<(), String> {
-    let path = format!("ifaces/{}/{}", iface, cfg);
+    let path = format!("ifaces/{iface}/{cfg}");
     set_cfg_value(&path, value)
 }
 
@@ -183,7 +183,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                             match *option {
                                 1 => {
                                     if !quiet {
-                                        println!("DHCP: Subnet Mask: {:?}", data);
+                                        println!("DHCP: Subnet Mask: {data:?}");
                                     }
                                     if data.len() == 4 && subnet_option.is_none() {
                                         subnet_option = Some(Vec::from(data));
@@ -191,7 +191,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                 }
                                 3 => {
                                     if !quiet {
-                                        println!("DHCP: Router: {:?}", data);
+                                        println!("DHCP: Router: {data:?}");
                                     }
                                     if data.len() == 4 && router_option.is_none() {
                                         router_option = Some(Vec::from(data));
@@ -199,7 +199,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                 }
                                 6 => {
                                     if !quiet {
-                                        println!("DHCP: Domain Name Server: {:?}", data);
+                                        println!("DHCP: Domain Name Server: {data:?}");
                                     }
                                     if data.len() == 4 && dns_option.is_none() {
                                         dns_option = Some(Vec::from(data));
@@ -207,17 +207,17 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                 }
                                 51 => {
                                     if !quiet {
-                                        println!("DHCP: Lease Time: {:?}", data);
+                                        println!("DHCP: Lease Time: {data:?}");
                                     }
                                 }
                                 53 => {
                                     if !quiet {
-                                        println!("DHCP: Message Type: {:?}", data);
+                                        println!("DHCP: Message Type: {data:?}");
                                     }
                                 }
                                 54 => {
                                     if !quiet {
-                                        println!("DHCP: Server ID: {:?}", data);
+                                        println!("DHCP: Server ID: {data:?}");
                                     }
                                     if data.len() == 4 {
                                         // Store the server ID
@@ -227,7 +227,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                 }
                                 _ => {
                                     if !quiet {
-                                        println!("DHCP: {}: {:?}", option, data);
+                                        println!("DHCP: {option}: {data:?}");
                                     }
                                 }
                             }
@@ -419,17 +419,15 @@ fn main() {
             daemon.ready().expect("failed to signal readiness");
 
             if let Err(err) = dhcp(iface, quiet) {
-                writeln!(io::stderr(), "dhcpd: {}", err).unwrap();
+                eprintln!("dhcpd: {err}");
                 process::exit(1);
             }
             process::exit(0);
         })
         .expect("dhcpd: failed to daemonize");
-    } else {
-        if let Err(err) = dhcp(iface, quiet) {
-            println!("Error {}", err);
-            writeln!(io::stderr(), "dhcpd: {}", err).unwrap();
-            process::exit(1);
-        }
+    } else if let Err(err) = dhcp(iface, quiet) {
+        println!("Error {err}");
+        eprintln!("dhcpd: {err}");
+        process::exit(1);
     }
 }

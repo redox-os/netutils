@@ -62,7 +62,7 @@ fn resolve_host(host: &str) -> Result<IpAddr> {
     match (host, 0).to_socket_addrs()?.next() {
         Some(addr) => Ok(addr.ip()),
         None => {
-            println!("Failed to resolve host: {}", host);
+            println!("Failed to resolve host: {host}");
             Err(anyhow!("Failed to resolve remote host's IP address"))
         }
     }
@@ -188,13 +188,10 @@ fn main() -> Result<()> {
     let data_size = ECHO_PAYLOAD_SIZE;
     let total_size = data_size + IP_HEADER_SIZE + ICMP_HEADER_SIZE;
     // Print the line similar to standard ping output
-    println!(
-        "PING {} ({}) {}({}) bytes of data.",
-        remote_host, remote_host, data_size, total_size
-    );
+    println!("PING {remote_host} ({remote_host}) {data_size}({total_size}) bytes of data.");
 
     // Create the path to the ICMP echo file for the remote host
-    let icmp_path = format!("/scheme/icmp/echo/{}", remote_host);
+    let icmp_path = format!("/scheme/icmp/echo/{remote_host}");
 
     // Open the ICMP echo file in read-write, non-blocking mode
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
@@ -243,7 +240,7 @@ fn main() -> Result<()> {
                     EventSource::Time => ping.on_time_event(),
                 };
 
-                if let Some(_) = done? {
+                if done?.is_some() {
                     break;
                 }
             }
@@ -253,7 +250,7 @@ fn main() -> Result<()> {
                     println!("Interrupted! Exiting gracefully.");
                     break;
                 }
-                eprintln!("Event queue error: {:?}", e);
+                eprintln!("Event queue error: {e:?}");
                 break;
             }
         }

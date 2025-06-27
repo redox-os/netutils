@@ -1,11 +1,11 @@
 use super::{n16, Checksum};
-use std::{mem, slice, u8};
+use std::{mem, slice};
 
 use ip::Ipv4Addr;
 
 /// UDP header as defined in RFC 768
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct UdpHeader {
     /// Source port
     pub src: n16,
@@ -36,7 +36,7 @@ impl Udp {
                     && mem::size_of::<UdpHeader>() <= header.len.get() as usize
                 {
                     return Some(Udp {
-                        header: header,
+                        header,
                         data: bytes[mem::size_of::<UdpHeader>()..header.len.get() as usize]
                             .to_vec(),
                     });
@@ -106,11 +106,7 @@ impl Udp {
             if computed_checksum == 0 {
                 computed_checksum = 0xFFFF;
             }
-            if computed_checksum == self.header.checksum.data {
-                true
-            } else {
-                false
-            }
+            computed_checksum == self.header.checksum.data
         }
     }
 }

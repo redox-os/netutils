@@ -55,7 +55,7 @@ impl PingStatistics {
     }
 
     pub fn print_summary(&self, remote_host: IpAddr) {
-        println!("--- {} ping statistics ---", remote_host);
+        println!("--- {remote_host} ping statistics ---");
         println!(
             "{} packets transmitted, {} packets received, {:.2}% packet loss",
             self.total_sent,
