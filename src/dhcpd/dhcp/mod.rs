@@ -1,4 +1,4 @@
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Dhcp {
     pub op: u8,
     pub htype: u8,

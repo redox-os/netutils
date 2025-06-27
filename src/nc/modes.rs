@@ -108,7 +108,7 @@ pub fn connect_udp(host: &str) -> Result<(), String> {
     // TODO: Implement some port selection process (while loop?)
     let socket = UdpSocket::bind("localhost:30000")
         .map_err(|e| format!("connect_udp error: could not bind to local socket ({})", e))?;
-    
+
     // Connect the UDP socket to the remote host
     socket.connect(host)
         .map_err(|e| format!("connect_udp error: could not set up remote socket ({})", e))?;
@@ -122,13 +122,12 @@ pub fn connect_udp(host: &str) -> Result<(), String> {
         });
     });
 
-    Ok(())
 }
 
 /// Listen for UDP datagrams on the specified socket
 pub fn listen_udp(host: &str) -> Result<(), String> {
-    let socket = try!(UdpSocket::bind(host)
-        .map_err(|e| { format!("connect_udp error: could not bind to local socket ({})", e) }));
+    let socket = UdpSocket::bind(host)
+        .map_err(|e| { format!("connect_udp error: could not bind to local socket ({})", e) })?;
     loop {
         let mut buffer = [0u8; BUFFER_SIZE];
         let count = match socket.recv_from(&mut buffer) {
