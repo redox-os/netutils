@@ -4,12 +4,20 @@ pub struct Ipv4Addr {
 }
 
 impl Ipv4Addr {
-    pub const BROADCAST: Ipv4Addr = Ipv4Addr { bytes: [255, 255, 255, 255] };
-    pub const LOOPBACK: Ipv4Addr = Ipv4Addr { bytes: [127, 0, 0, 1] };
-    pub const NULL: Ipv4Addr = Ipv4Addr { bytes: [0, 0, 0, 0] };
+    pub const BROADCAST: Ipv4Addr = Ipv4Addr {
+        bytes: [255, 255, 255, 255],
+    };
+    pub const LOOPBACK: Ipv4Addr = Ipv4Addr {
+        bytes: [127, 0, 0, 1],
+    };
+    pub const NULL: Ipv4Addr = Ipv4Addr {
+        bytes: [0, 0, 0, 0],
+    };
 
     pub fn from_str(string: &str) -> Self {
-        let mut addr = Ipv4Addr { bytes: [0, 0, 0, 0] };
+        let mut addr = Ipv4Addr {
+            bytes: [0, 0, 0, 0],
+        };
 
         let mut i = 0;
         for part in string.split('.') {

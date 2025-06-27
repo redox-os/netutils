@@ -4,7 +4,8 @@ use std::io::{self, Write};
 mod modes;
 use modes::*;
 
-static MAN_PAGE: &'static str = /* @MANSTART{nc} */ r#"
+static MAN_PAGE: &'static str = /* @MANSTART{nc} */
+    r#"
 NAME
     nc - Concatenate and redirect sockets
 SYNOPSIS
@@ -38,7 +39,6 @@ enum NcMode {
 }
 
 fn main() {
-
     let mut args = env::args().skip(1);
     let mut hostname = "".to_string();
     let mut proto = TransportProtocol::Tcp;
@@ -88,5 +88,4 @@ fn main() {
             });
         }
     }
-
 }

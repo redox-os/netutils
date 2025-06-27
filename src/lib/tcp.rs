@@ -34,15 +34,19 @@ impl Tcp {
         self.header.checksum.data = 0;
 
         let proto = n16::new(0x06);
-        let segment_len = n16::new((mem::size_of::<TcpHeader>() + self.options.len() + self.data.len()) as u16);
+        let segment_len =
+            n16::new((mem::size_of::<TcpHeader>() + self.options.len() + self.data.len()) as u16);
         self.header.checksum.data = Checksum::compile(unsafe {
-            Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len()) +
-            Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len()) +
-            Checksum::sum((&segment_len as *const n16) as usize, mem::size_of::<n16>()) +
-            Checksum::sum((&proto as *const n16) as usize, mem::size_of::<n16>()) +
-            Checksum::sum((&self.header as *const TcpHeader) as usize, mem::size_of::<TcpHeader>()) +
-            Checksum::sum(self.options.as_ptr() as usize, self.options.len()) +
-            Checksum::sum(self.data.as_ptr() as usize, self.data.len())
+            Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len())
+                + Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len())
+                + Checksum::sum((&segment_len as *const n16) as usize, mem::size_of::<n16>())
+                + Checksum::sum((&proto as *const n16) as usize, mem::size_of::<n16>())
+                + Checksum::sum(
+                    (&self.header as *const TcpHeader) as usize,
+                    mem::size_of::<TcpHeader>(),
+                )
+                + Checksum::sum(self.options.as_ptr() as usize, self.options.len())
+                + Checksum::sum(self.data.as_ptr() as usize, self.data.len())
         });
     }
 
@@ -67,8 +71,10 @@ impl Tcp {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const TcpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<TcpHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<TcpHeader>(),
+            ));
             ret.extend_from_slice(&self.options);
             ret.extend_from_slice(&self.data);
             ret

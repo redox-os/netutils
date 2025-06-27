@@ -4,7 +4,9 @@ pub struct MacAddr {
 }
 
 impl MacAddr {
-    pub const BROADCAST: MacAddr = MacAddr { bytes: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] };
+    pub const BROADCAST: MacAddr = MacAddr {
+        bytes: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+    };
 
     pub fn from_str(string: &str) -> Self {
         MacAddr::try_parse_with_delimeter(string, ':')
@@ -35,13 +37,15 @@ impl MacAddr {
     }
 
     pub fn to_string(&self) -> String {
-        format!("{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}",
-                self.bytes[0],
-                self.bytes[1],
-                self.bytes[2],
-                self.bytes[3],
-                self.bytes[4],
-                self.bytes[5])
+        format!(
+            "{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}-{:>02X}",
+            self.bytes[0],
+            self.bytes[1],
+            self.bytes[2],
+            self.bytes[3],
+            self.bytes[4],
+            self.bytes[5]
+        )
     }
 }
 
@@ -51,7 +55,9 @@ mod test {
 
     #[test]
     fn from_str_test() {
-        let mac = MacAddr { bytes: [0x01, 0x23, 0x45, 0x67, 0x89, 0xab] };
+        let mac = MacAddr {
+            bytes: [0x01, 0x23, 0x45, 0x67, 0x89, 0xab],
+        };
         let empty_mac = MacAddr::default();
 
         assert_eq!(mac, MacAddr::from_str("01:23:45:67:89:ab"));

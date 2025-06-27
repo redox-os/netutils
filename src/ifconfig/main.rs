@@ -1,6 +1,5 @@
 // main.rs
 
-
 /*
 Entry point for the ifconfig utility on Redox OS.
 
@@ -21,8 +20,6 @@ The program supports the following options:
 * The displayed MAC address is a placeholder.
 
 */
-
-
 
 extern crate regex;
 use std::env;

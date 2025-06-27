@@ -32,8 +32,9 @@ impl Udp {
             unsafe {
                 let header = *(bytes.as_ptr() as *const UdpHeader);
 
-                if header.len.get() as usize <= bytes.len() &&
-                   mem::size_of::<UdpHeader>() <= header.len.get() as usize {
+                if header.len.get() as usize <= bytes.len()
+                    && mem::size_of::<UdpHeader>() <= header.len.get() as usize
+                {
                     return Some(Udp {
                         header: header,
                         data: bytes[mem::size_of::<UdpHeader>()..header.len.get() as usize]
@@ -50,8 +51,10 @@ impl Udp {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const UdpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<UdpHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<UdpHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }

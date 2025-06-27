@@ -1,6 +1,6 @@
 use std::fs::File;
-use std::io::{Result, Read, Write};
-use std::{mem, slice, u8, u16};
+use std::io::{Read, Result, Write};
+use std::{mem, slice, u16, u8};
 
 pub use ip::Ipv4Addr;
 pub use mac::MacAddr;
@@ -120,7 +120,7 @@ impl Arp {
             unsafe {
                 return Some(Arp {
                     header: *(bytes.as_ptr() as *const ArpHeader),
-                    data: bytes[mem::size_of::<ArpHeader>() ..].to_vec(),
+                    data: bytes[mem::size_of::<ArpHeader>()..].to_vec(),
                 });
             }
         }
@@ -130,8 +130,10 @@ impl Arp {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const ArpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<ArpHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<ArpHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }
@@ -158,7 +160,7 @@ impl EthernetII {
             unsafe {
                 return Some(EthernetII {
                     header: *(bytes.as_ptr() as *const EthernetIIHeader),
-                    data: bytes[mem::size_of::<EthernetIIHeader>() ..].to_vec(),
+                    data: bytes[mem::size_of::<EthernetIIHeader>()..].to_vec(),
                 });
             }
         }
@@ -168,8 +170,10 @@ impl EthernetII {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const EthernetIIHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<EthernetIIHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<EthernetIIHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }
@@ -203,7 +207,10 @@ impl Ipv4 {
         self.header.checksum.data = 0;
 
         self.header.checksum.data = Checksum::compile(unsafe {
-            Checksum::sum((&self.header as *const Ipv4Header) as usize, mem::size_of::<Ipv4Header>())
+            Checksum::sum(
+                (&self.header as *const Ipv4Header) as usize,
+                mem::size_of::<Ipv4Header>(),
+            )
         });
     }
 
@@ -213,13 +220,15 @@ impl Ipv4 {
                 let header = *(bytes.as_ptr() as *const Ipv4Header);
                 let header_len = ((header.ver_hlen & 0xF) << 2) as usize;
 
-                if header_len >= mem::size_of::<Ipv4Header>() && header_len <= bytes.len()
-                    && header.len.get() as usize <= bytes.len() && header_len <= header.len.get() as usize
+                if header_len >= mem::size_of::<Ipv4Header>()
+                    && header_len <= bytes.len()
+                    && header.len.get() as usize <= bytes.len()
+                    && header_len <= header.len.get() as usize
                 {
                     return Some(Ipv4 {
                         header: header,
-                        options: bytes[mem::size_of::<Ipv4Header>() .. header_len].to_vec(),
-                        data: bytes[header_len .. header.len.get() as usize].to_vec(),
+                        options: bytes[mem::size_of::<Ipv4Header>()..header_len].to_vec(),
+                        data: bytes[header_len..header.len.get() as usize].to_vec(),
                     });
                 }
             }
@@ -230,8 +239,10 @@ impl Ipv4 {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const Ipv4Header = &self.header;
-            let mut ret = Vec::<u8>::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                                mem::size_of::<Ipv4Header>()));
+            let mut ret = Vec::<u8>::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<Ipv4Header>(),
+            ));
             ret.extend_from_slice(&self.options);
             ret.extend_from_slice(&self.data);
             ret

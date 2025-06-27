@@ -151,7 +151,6 @@ fn validate_ip_address(ip: &str) -> Result<IpAddr, InterfaceError> {
         .map_err(|_| InterfaceError::InvalidIpAddress(ip.to_string()))
 }
 
-
 /// Configures a network interface (placeholder function)
 #[allow(dead_code)]
 pub fn configure_interface(_iface: &str, mac: &str, ip: &str) -> Result<(), InterfaceError> {
