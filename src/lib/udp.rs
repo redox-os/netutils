@@ -94,14 +94,14 @@ impl Udp {
             header.checksum.data = 0;
             let mut computed_checksum: u16 = Checksum::compile(unsafe {
                 // Pseudo header
-                Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len()) +
-                Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len()) +
-                Checksum::sum((&0x1100u16 as *const u16) as usize, mem::size_of::<u16>()) +
-                Checksum::sum((&header.len as *const n16) as usize, mem::size_of::<n16>()) +
+                Checksum::sum(src_addr.bytes.as_ptr(), src_addr.bytes.len()) +
+                Checksum::sum(dst_addr.bytes.as_ptr(), dst_addr.bytes.len()) +
+                Checksum::sum(&0x1100u16 as *const u16 as *const u8, mem::size_of::<u16>()) +
+                Checksum::sum(&header.len as *const n16 as *const u8, mem::size_of::<n16>()) +
                 // Real header
-                Checksum::sum((&header as *const UdpHeader) as usize, mem::size_of::<UdpHeader>()) +
+                Checksum::sum(&header as *const UdpHeader as *const u8, mem::size_of::<UdpHeader>()) +
                 // Data
-                Checksum::sum(self.data.as_ptr() as usize, self.data.len())
+                Checksum::sum(self.data.as_ptr() , self.data.len())
             });
             if computed_checksum == 0 {
                 computed_checksum = 0xFFFF;

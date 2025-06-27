@@ -37,16 +37,19 @@ impl Tcp {
         let segment_len =
             n16::new((mem::size_of::<TcpHeader>() + self.options.len() + self.data.len()) as u16);
         self.header.checksum.data = Checksum::compile(unsafe {
-            Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len())
-                + Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len())
-                + Checksum::sum((&segment_len as *const n16) as usize, mem::size_of::<n16>())
-                + Checksum::sum((&proto as *const n16) as usize, mem::size_of::<n16>())
+            Checksum::sum(src_addr.bytes.as_ptr(), src_addr.bytes.len())
+                + Checksum::sum(dst_addr.bytes.as_ptr(), dst_addr.bytes.len())
                 + Checksum::sum(
-                    (&self.header as *const TcpHeader) as usize,
+                    &segment_len as *const n16 as *const u8,
+                    mem::size_of::<n16>(),
+                )
+                + Checksum::sum(&proto as *const n16 as *const u8, mem::size_of::<n16>())
+                + Checksum::sum(
+                    &self.header as *const TcpHeader as *const u8,
                     mem::size_of::<TcpHeader>(),
                 )
-                + Checksum::sum(self.options.as_ptr() as usize, self.options.len())
-                + Checksum::sum(self.data.as_ptr() as usize, self.data.len())
+                + Checksum::sum(self.options.as_ptr(), self.options.len())
+                + Checksum::sum(self.data.as_ptr(), self.data.len())
         });
     }
 

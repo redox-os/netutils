@@ -69,17 +69,17 @@ pub struct Checksum {
 }
 
 impl Checksum {
-    pub unsafe fn sum(mut ptr: usize, mut len: usize) -> usize {
+    pub unsafe fn sum(mut ptr: *const u8, mut len: usize) -> usize {
         let mut sum = 0;
 
         while len > 1 {
             sum += *(ptr as *const u16) as usize;
             len -= 2;
-            ptr += 2;
+            ptr = ptr.add(2);
         }
 
         if len > 0 {
-            sum += *(ptr as *const u8) as usize;
+            sum += *ptr as usize;
         }
 
         sum
@@ -208,7 +208,7 @@ impl Ipv4 {
 
         self.header.checksum.data = Checksum::compile(unsafe {
             Checksum::sum(
-                (&self.header as *const Ipv4Header) as usize,
+                &self.header as *const Ipv4Header as *const u8,
                 mem::size_of::<Ipv4Header>(),
             )
         });
