@@ -21,10 +21,10 @@ pub enum InterfaceError {
 impl fmt::Display for InterfaceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InterfaceError::NotFound(msg) => write!(f, "Interface not found: {}", msg),
-            InterfaceError::ReadError(msg) => write!(f, "Read error: {}", msg),
-            InterfaceError::InvalidMacAddress(addr) => write!(f, "Invalid MAC address: {}", addr),
-            InterfaceError::InvalidIpAddress(addr) => write!(f, "Invalid IP address: {}", addr),
+            InterfaceError::NotFound(msg) => write!(f, "Interface not found: {msg}"),
+            InterfaceError::ReadError(msg) => write!(f, "Read error: {msg}"),
+            InterfaceError::InvalidMacAddress(addr) => write!(f, "Invalid MAC address: {addr}"),
+            InterfaceError::InvalidIpAddress(addr) => write!(f, "Invalid IP address: {addr}"),
         }
     }
 }
@@ -116,17 +116,17 @@ pub fn list_all_interfaces() -> Result<Vec<NetworkInterface>, InterfaceError> {
     }
 
     let entries = fs::read_dir(path)
-        .map_err(|e| InterfaceError::ReadError(format!("Failed to read interfaces: {}", e)))?;
+        .map_err(|e| InterfaceError::ReadError(format!("Failed to read interfaces: {e}")))?;
 
     let mut interfaces = Vec::new();
     for entry in entries {
         let entry =
-            entry.map_err(|e| InterfaceError::ReadError(format!("Failed to read entry: {}", e)))?;
+            entry.map_err(|e| InterfaceError::ReadError(format!("Failed to read entry: {e}")))?;
         if let Some(iface_name) = entry.file_name().to_str() {
             // Try to create a NetworkInterface instance
             match NetworkInterface::new(iface_name) {
                 Ok(interface) => interfaces.push(interface),
-                Err(e) => eprintln!("Skipping interface '{}': {}", iface_name, e),
+                Err(e) => eprintln!("Skipping interface '{iface_name}': {e}"),
             }
         }
     }
@@ -137,7 +137,7 @@ pub fn list_all_interfaces() -> Result<Vec<NetworkInterface>, InterfaceError> {
 fn validate_mac_address(mac: &str) -> Result<(), InterfaceError> {
     // Regular expression for MAC address validation
     let mac_regex = Regex::new(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
-        .map_err(|e| InterfaceError::InvalidMacAddress(format!("Regex error: {}", e)))?;
+        .map_err(|e| InterfaceError::InvalidMacAddress(format!("Regex error: {e}")))?;
     if mac_regex.is_match(mac) {
         Ok(())
     } else {
@@ -150,7 +150,6 @@ fn validate_ip_address(ip: &str) -> Result<IpAddr, InterfaceError> {
     ip.parse::<IpAddr>()
         .map_err(|_| InterfaceError::InvalidIpAddress(ip.to_string()))
 }
-
 
 /// Configures a network interface (placeholder function)
 #[allow(dead_code)]
