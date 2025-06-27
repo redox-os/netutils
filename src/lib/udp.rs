@@ -1,11 +1,11 @@
 use super::{n16, Checksum};
-use std::{mem, slice, u8};
+use std::{mem, slice};
 
 use ip::Ipv4Addr;
 
 /// UDP header as defined in RFC 768
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct UdpHeader {
     /// Source port
     pub src: n16,
@@ -32,10 +32,11 @@ impl Udp {
             unsafe {
                 let header = *(bytes.as_ptr() as *const UdpHeader);
 
-                if header.len.get() as usize <= bytes.len() &&
-                   mem::size_of::<UdpHeader>() <= header.len.get() as usize {
+                if header.len.get() as usize <= bytes.len()
+                    && mem::size_of::<UdpHeader>() <= header.len.get() as usize
+                {
                     return Some(Udp {
-                        header: header,
+                        header,
                         data: bytes[mem::size_of::<UdpHeader>()..header.len.get() as usize]
                             .to_vec(),
                     });
@@ -50,8 +51,10 @@ impl Udp {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const UdpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<UdpHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<UdpHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }
@@ -91,23 +94,19 @@ impl Udp {
             header.checksum.data = 0;
             let mut computed_checksum: u16 = Checksum::compile(unsafe {
                 // Pseudo header
-                Checksum::sum(src_addr.bytes.as_ptr() as usize, src_addr.bytes.len()) +
-                Checksum::sum(dst_addr.bytes.as_ptr() as usize, dst_addr.bytes.len()) +
-                Checksum::sum((&0x1100u16 as *const u16) as usize, mem::size_of::<u16>()) +
-                Checksum::sum((&header.len as *const n16) as usize, mem::size_of::<n16>()) +
+                Checksum::sum(src_addr.bytes.as_ptr(), src_addr.bytes.len()) +
+                Checksum::sum(dst_addr.bytes.as_ptr(), dst_addr.bytes.len()) +
+                Checksum::sum(&0x1100u16 as *const u16 as *const u8, mem::size_of::<u16>()) +
+                Checksum::sum(&header.len as *const n16 as *const u8, mem::size_of::<n16>()) +
                 // Real header
-                Checksum::sum((&header as *const UdpHeader) as usize, mem::size_of::<UdpHeader>()) +
+                Checksum::sum(&header as *const UdpHeader as *const u8, mem::size_of::<UdpHeader>()) +
                 // Data
-                Checksum::sum(self.data.as_ptr() as usize, self.data.len())
+                Checksum::sum(self.data.as_ptr() , self.data.len())
             });
             if computed_checksum == 0 {
                 computed_checksum = 0xFFFF;
             }
-            if computed_checksum == self.header.checksum.data {
-                true
-            } else {
-                false
-            }
+            computed_checksum == self.header.checksum.data
         }
     }
 }

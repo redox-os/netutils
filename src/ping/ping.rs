@@ -208,7 +208,7 @@ impl Ping {
 
         let mut received = 0;
         self.waiting_for.retain(|_ts, &mut seq| {
-            if seq as u16 == payload.seq {
+            if seq == payload.seq {
                 received += 1;
                 println!(
                     "From {} icmp_seq={} time={}ms",
@@ -261,7 +261,7 @@ impl Ping {
         }
 
         let payload = EchoPayload {
-            seq: self.seq as u16,
+            seq: self.seq,
             timestamp: *time,
             // ttl: self.ttl,
             payload: [1; ECHO_PAYLOAD_SIZE],
@@ -305,7 +305,7 @@ impl Ping {
                 break;
             }
             // This one timed out
-            println!("From {} icmp_seq={} timeout", remote_host, seq);
+            println!("From {remote_host} icmp_seq={seq} timeout");
             self.waiting_for.pop_first();
         }
 

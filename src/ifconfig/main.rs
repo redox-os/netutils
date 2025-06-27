@@ -1,6 +1,5 @@
 // main.rs
 
-
 /*
 Entry point for the ifconfig utility on Redox OS.
 
@@ -21,8 +20,6 @@ The program supports the following options:
 * The displayed MAC address is a placeholder.
 
 */
-
-
 
 extern crate regex;
 use std::env;
@@ -80,16 +77,16 @@ AUTHOR
 
 fn main() {
     // Collect command-line arguments, skipping the program name
-    let mut args = env::args().skip(1);
+    let args = env::args().skip(1);
     let mut show_all = false;
     let mut interface_name = None;
 
     // Parse command-line arguments
-    while let Some(arg) = args.next() {
+    for arg in args {
         match arg.as_str() {
             "-h" | "--help" => {
                 // Display the manual page
-                println!("{}", MAN_PAGE);
+                println!("{MAN_PAGE}");
                 return;
             }
             "-a" => {
@@ -102,7 +99,7 @@ fn main() {
                     interface_name = Some(arg);
                 } else {
                     // Handle invalid arguments
-                    eprintln!("Invalid argument: {}", arg);
+                    eprintln!("Invalid argument: {arg}");
                     return;
                 }
             }
@@ -114,8 +111,8 @@ fn main() {
         if let Some(name) = interface_name {
             // Display details for the specific interface if it exists
             match NetworkInterface::new(&name) {
-                Ok(interface) => println!("{}", interface),
-                Err(_) => eprintln!("Error: Interface '{}' not found.", name),
+                Ok(interface) => println!("{interface}"),
+                Err(_) => eprintln!("Error: Interface '{name}' not found."),
             }
         } else {
             // Display all interfaces if no specific name is provided
@@ -125,19 +122,19 @@ fn main() {
                         println!("No interfaces found.");
                     } else {
                         for interface in interfaces {
-                            println!("{}", interface);
+                            println!("{interface}");
                             println!(); // Add an empty line between interfaces
                         }
                     }
                 }
-                Err(e) => eprintln!("Error listing interfaces: {}", e),
+                Err(e) => eprintln!("Error listing interfaces: {e}"),
             }
         }
     } else if let Some(name) = interface_name {
         // Show details for a specific interface without `-a`
         match NetworkInterface::new(&name) {
-            Ok(interface) => println!("{}", interface),
-            Err(_) => eprintln!("Error: Interface '{}' not found.", name),
+            Ok(interface) => println!("{interface}"),
+            Err(_) => eprintln!("Error: Interface '{name}' not found."),
         }
     } else {
         // Default behavior: Show all interfaces if no arguments are provided
@@ -147,12 +144,12 @@ fn main() {
                     println!("No interfaces found.");
                 } else {
                     for interface in interfaces {
-                        println!("{}", interface);
+                        println!("{interface}");
                         println!(); // Add an empty line between interfaces
                     }
                 }
             }
-            Err(e) => eprintln!("Error listing interfaces: {}", e),
+            Err(e) => eprintln!("Error listing interfaces: {e}"),
         }
     }
 }

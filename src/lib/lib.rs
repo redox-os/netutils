@@ -1,6 +1,6 @@
 use std::fs::File;
-use std::io::{Result, Read, Write};
-use std::{mem, slice, u8, u16};
+use std::io::{Read, Result, Write};
+use std::{mem, slice};
 
 pub use ip::Ipv4Addr;
 pub use mac::MacAddr;
@@ -12,13 +12,13 @@ pub mod udp;
 
 pub fn getcfg(key: &str) -> Result<String> {
     let mut value = String::new();
-    let mut file = File::open(&format!("/etc/net/{}", key))?;
+    let mut file = File::open(format!("/etc/net/{key}"))?;
     file.read_to_string(&mut value)?;
     Ok(value.trim().to_string())
 }
 
 pub fn setcfg(key: &str, value: &str) -> Result<()> {
-    let mut file = File::create(&format!("/etc/net/{}", key))?;
+    let mut file = File::create(format!("/etc/net/{key}"))?;
     file.write(value.as_bytes())?;
     file.set_len(value.len() as u64)?;
     file.sync_all()?;
@@ -27,7 +27,7 @@ pub fn setcfg(key: &str, value: &str) -> Result<()> {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct n16(u16);
 
 impl n16 {
@@ -46,7 +46,7 @@ impl n16 {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct n32(u32);
 
 impl n32 {
@@ -69,17 +69,17 @@ pub struct Checksum {
 }
 
 impl Checksum {
-    pub unsafe fn sum(mut ptr: usize, mut len: usize) -> usize {
+    pub unsafe fn sum(mut ptr: *const u8, mut len: usize) -> usize {
         let mut sum = 0;
 
         while len > 1 {
             sum += *(ptr as *const u16) as usize;
             len -= 2;
-            ptr += 2;
+            ptr = ptr.add(2);
         }
 
         if len > 0 {
-            sum += *(ptr as *const u8) as usize;
+            sum += *ptr as usize;
         }
 
         sum
@@ -95,7 +95,7 @@ impl Checksum {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ArpHeader {
     pub htype: n16,
     pub ptype: n16,
@@ -120,7 +120,7 @@ impl Arp {
             unsafe {
                 return Some(Arp {
                     header: *(bytes.as_ptr() as *const ArpHeader),
-                    data: bytes[mem::size_of::<ArpHeader>() ..].to_vec(),
+                    data: bytes[mem::size_of::<ArpHeader>()..].to_vec(),
                 });
             }
         }
@@ -130,8 +130,10 @@ impl Arp {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const ArpHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<ArpHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<ArpHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }
@@ -139,7 +141,7 @@ impl Arp {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct EthernetIIHeader {
     pub dst: MacAddr,
     pub src: MacAddr,
@@ -158,7 +160,7 @@ impl EthernetII {
             unsafe {
                 return Some(EthernetII {
                     header: *(bytes.as_ptr() as *const EthernetIIHeader),
-                    data: bytes[mem::size_of::<EthernetIIHeader>() ..].to_vec(),
+                    data: bytes[mem::size_of::<EthernetIIHeader>()..].to_vec(),
                 });
             }
         }
@@ -168,8 +170,10 @@ impl EthernetII {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const EthernetIIHeader = &self.header;
-            let mut ret = Vec::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                          mem::size_of::<EthernetIIHeader>()));
+            let mut ret = Vec::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<EthernetIIHeader>(),
+            ));
             ret.extend_from_slice(&self.data);
             ret
         }
@@ -177,7 +181,7 @@ impl EthernetII {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Ipv4Header {
     pub ver_hlen: u8,
     pub services: u8,
@@ -203,7 +207,10 @@ impl Ipv4 {
         self.header.checksum.data = 0;
 
         self.header.checksum.data = Checksum::compile(unsafe {
-            Checksum::sum((&self.header as *const Ipv4Header) as usize, mem::size_of::<Ipv4Header>())
+            Checksum::sum(
+                &self.header as *const Ipv4Header as *const u8,
+                mem::size_of::<Ipv4Header>(),
+            )
         });
     }
 
@@ -213,13 +220,15 @@ impl Ipv4 {
                 let header = *(bytes.as_ptr() as *const Ipv4Header);
                 let header_len = ((header.ver_hlen & 0xF) << 2) as usize;
 
-                if header_len >= mem::size_of::<Ipv4Header>() && header_len <= bytes.len()
-                    && header.len.get() as usize <= bytes.len() && header_len <= header.len.get() as usize
+                if header_len >= mem::size_of::<Ipv4Header>()
+                    && header_len <= bytes.len()
+                    && header.len.get() as usize <= bytes.len()
+                    && header_len <= header.len.get() as usize
                 {
                     return Some(Ipv4 {
-                        header: header,
-                        options: bytes[mem::size_of::<Ipv4Header>() .. header_len].to_vec(),
-                        data: bytes[header_len .. header.len.get() as usize].to_vec(),
+                        header,
+                        options: bytes[mem::size_of::<Ipv4Header>()..header_len].to_vec(),
+                        data: bytes[header_len..header.len.get() as usize].to_vec(),
                     });
                 }
             }
@@ -230,8 +239,10 @@ impl Ipv4 {
     pub fn to_bytes(&self) -> Vec<u8> {
         unsafe {
             let header_ptr: *const Ipv4Header = &self.header;
-            let mut ret = Vec::<u8>::from(slice::from_raw_parts(header_ptr as *const u8,
-                                                                mem::size_of::<Ipv4Header>()));
+            let mut ret = Vec::<u8>::from(slice::from_raw_parts(
+                header_ptr as *const u8,
+                mem::size_of::<Ipv4Header>(),
+            ));
             ret.extend_from_slice(&self.options);
             ret.extend_from_slice(&self.data);
             ret

@@ -1,4 +1,4 @@
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Dhcp {
     pub op: u8,
     pub htype: u8,
@@ -15,5 +15,5 @@ pub struct Dhcp {
     pub sname: [u8; 64],
     pub file: [u8; 128],
     pub magic: u32,
-    pub options: [u8; 308]
+    pub options: [u8; 308],
 }
