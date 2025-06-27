@@ -27,10 +27,6 @@ path = "src/irc/main.rs"
 name = "nc"
 path = "src/nc/main.rs"
 
-[[bin]]
-name = "ntp"
-path = "src/ntp/main.rs"
-
 # [[bin]]
 # name = "telnetd"
 # path = "src/telnetd/main.rs"
@@ -54,7 +50,6 @@ path = "src/ifconfig/main.rs"
 [dependencies]
 anyhow = "1"
 # hyper-rustls = "0.16.1"
-ntpclient = { git = "https://github.com/willem66745/ntpclient-rust" }
 redox-daemon = "0.1.2"
 redox_event = "0.4"
 termion = "4"
