@@ -67,11 +67,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
-name = "arg_parser"
-version = "0.1.0"
-source = "git+https://gitlab.redox-os.org/redox-os/arg-parser.git#1c434b55f3e1a0375ebcca85b3e88db7378e82fa"
-
-[[package]]
 name = "bitflags"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -192,7 +187,6 @@ name = "netutils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arg_parser",
  "clap",
  "libc",
  "libredox",
