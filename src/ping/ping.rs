@@ -168,6 +168,7 @@ impl Ping {
     }
 
     pub fn on_echo_event(&mut self) -> Result<Option<()>> {
+        // Read an ICMP echo reply into a fresh payload buffer.
         let mut payload = EchoPayload {
             seq: 0,
             timestamp: TimeSpec {
@@ -179,49 +180,41 @@ impl Ping {
         };
 
         let readed = match self.echo_file.read(&mut payload) {
+            Ok(0) => {
+                // No data – treat as an error condition.
+                self.stats.record_error();
+                return Ok(None);
+            }
             Ok(cnt) => cnt,
-            Err(e) if e.is_wouldblock() => 0,
+            Err(e) if e.is_wouldblock() => return Ok(None),
             Err(e) => return Err(e).context("Failed to read from echo file"),
         };
-
-        if self.received > 0 {
-            let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
-                .context("Failed to get the current time")?;
-            let rtt = time_diff_ms(&payload.timestamp, &time);
-            self.stats.record_received(rtt);
-        } else {
-            self.stats.record_error();
-        }
-
-        if readed == 0 {
-            return Ok(None);
-        }
 
         if readed < mem::size_of::<EchoPayload>() {
             bail!("Not enough data in the echo file");
         }
 
-        let time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
+        // Compute round‑trip time.
+        let now = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
             .context("Failed to get the current time")?;
+        let rtt = time_diff_ms(&payload.timestamp, &now);
 
-        let remote_host = self.remote_host;
+        // Look for a pending request that matches the received sequence number.
+        if let Some((&ts, _)) = self.waiting_for.iter().find(|(_, &seq)| seq == payload.seq) {
+            // Matching entry found – remove it, record success and print the result.
+            self.waiting_for.remove(&ts);
+            println!(
+                "From {} icmp_seq={} time={}ms",
+                self.remote_host, payload.seq, rtt
+            );
+            self.stats.record_received(rtt);
+            self.received += 1;
+        } else {
+            // No matching request – count as an error.
+            self.stats.record_error();
+        }
 
-        let mut received = 0;
-        self.waiting_for.retain(|_ts, &mut seq| {
-            if seq == payload.seq {
-                received += 1;
-                println!(
-                    "From {} icmp_seq={} time={}ms",
-                    remote_host,
-                    seq,
-                    time_diff_ms(&payload.timestamp, &time)
-                );
-                false
-            } else {
-                true
-            }
-        });
-        self.received += received;
+        // Determine whether the ping session is complete.
         self.is_finished()
     }
 
