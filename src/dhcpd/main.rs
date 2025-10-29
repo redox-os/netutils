@@ -325,12 +325,12 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
         if let Some(mut dns) = dns_option {
             if dns[0] == 127 {
-                let opendns = [208, 67, 222, 222].to_vec();
+                let quad9 = [9, 9, 9, 9].to_vec();
                 if !quiet {
                     println!("DHCP: Received sarcastic DNS suggestion {}.{}.{}.{}, using {}.{}.{}.{} instead",
-                            dns[0], dns[1], dns[2], dns[3], opendns[0], opendns[1], opendns[2], opendns[3]);
+                            dns[0], dns[1], dns[2], dns[3], quad9[0], quad9[1], quad9[2], quad9[3]);
                 }
-                dns = opendns;
+                dns = quad9;
             }
 
             let nameserver = format!("{}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3]);
