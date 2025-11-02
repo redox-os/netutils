@@ -98,7 +98,7 @@ impl MacAddr {
     }
 }
 
-fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
+fn dhcp(iface: &str, verbose: bool) -> Result<(), String> {
     let current_mac = MacAddr::from_str(get_iface_cfg_value(iface, "mac")?.trim());
 
     let current_ip = get_iface_cfg_value(iface, "addr/list")?
@@ -107,7 +107,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         .map(|l| l.to_owned())
         .unwrap_or("0.0.0.0".to_string());
 
-    if !quiet {
+    if verbose {
         println!(
             "DHCP: MAC: {} Current IP: {}",
             current_mac.to_string(),
@@ -192,7 +192,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
         let _sent = try_fmt!(socket.send(discover_data), "failed to send discover");
 
-        if !quiet {
+        if verbose {
             println!("DHCP: Sent Discover");
         }
     }
@@ -200,7 +200,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
     let mut offer_data = [0; 65536];
     try_fmt!(socket.recv(&mut offer_data), "failed to receive offer");
     let offer = unsafe { &*(offer_data.as_ptr() as *const Dhcp) };
-    if !quiet {
+    if verbose {
         println!(
             "DHCP: Offer IP: {:?}, Server IP: {:?}",
             offer.yiaddr, offer.siaddr
@@ -226,7 +226,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                             }
                             match *option {
                                 1 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Subnet Mask: {data:?}");
                                     }
                                     if data.len() == 4 && subnet_option.is_none() {
@@ -234,7 +234,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                     }
                                 }
                                 3 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Router: {data:?}");
                                     }
                                     if data.len() == 4 && router_option.is_none() {
@@ -242,7 +242,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                     }
                                 }
                                 6 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Domain Name Server: {data:?}");
                                     }
                                     if data.len() == 4 && dns_option.is_none() {
@@ -250,17 +250,17 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                     }
                                 }
                                 51 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Lease Time: {data:?}");
                                     }
                                 }
                                 53 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Message Type: {data:?}");
                                     }
                                 }
                                 54 => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: Server ID: {data:?}");
                                     }
                                     if data.len() == 4 {
@@ -270,7 +270,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                                     }
                                 }
                                 _ => {
-                                    if !quiet {
+                                    if verbose {
                                         println!("DHCP: {option}: {data:?}");
                                     }
                                 }
@@ -301,7 +301,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
             "failed to set ip"
         );
 
-        if !quiet {
+        if verbose {
             let new_ip = try_fmt!(get_iface_cfg_value(iface, "addr/list"), "failed to get ip");
             println!("DHCP: New IP: {}", new_ip.trim());
         }
@@ -317,7 +317,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                 "failed to set default route"
             );
 
-            if !quiet {
+            if verbose {
                 let new_router = try_fmt!(get_cfg_value("route/list"), "failed to get ip router");
                 println!("DHCP: New Router: {}", new_router.trim());
             }
@@ -326,7 +326,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         if let Some(mut dns) = dns_option {
             if dns[0] == 127 {
                 let quad9 = [9, 9, 9, 9].to_vec();
-                if !quiet {
+                if verbose {
                     println!("DHCP: Received sarcastic DNS suggestion {}.{}.{}.{}, using {}.{}.{}.{} instead",
                             dns[0], dns[1], dns[2], dns[3], quad9[0], quad9[1], quad9[2], quad9[3]);
                 }
@@ -340,7 +340,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
                 "failed to set name server"
             );
 
-            if !quiet {
+            if verbose {
                 let new_dns = try_fmt!(get_cfg_value("resolv/nameserver"), "failed to get dns");
                 println!("DHCP: New DNS: {}", new_dns.trim());
             }
@@ -424,7 +424,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
         let _sent = try_fmt!(socket.send(request_data), "failed to send request");
 
-        if !quiet {
+        if verbose {
             println!("DHCP: Sent Request");
         }
     }
@@ -433,7 +433,7 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
         let mut ack_data = [0; 65536];
         try_fmt!(socket.recv(&mut ack_data), "failed to receive ack");
         let ack = unsafe { &*(ack_data.as_ptr() as *const Dhcp) };
-        if !quiet {
+        if verbose {
             println!(
                 "DHCP: Ack IP: {:?}, Server IP: {:?}",
                 ack.yiaddr, ack.siaddr
@@ -446,14 +446,14 @@ fn dhcp(iface: &str, quiet: bool) -> Result<(), String> {
 
 fn main() {
     let mut background = false;
-    let mut quiet = false;
+    let mut verbose = false;
     let iface = "eth0";
 
     //TODO: parse iface from the args
     for arg in env::args().skip(1) {
         match arg.as_ref() {
             "-b" => background = true,
-            "-q" => quiet = true,
+            "-v" => verbose = true,
             _ => (),
         }
     }
@@ -462,14 +462,14 @@ fn main() {
         redox_daemon::Daemon::new(move |daemon| {
             daemon.ready().expect("failed to signal readiness");
 
-            if let Err(err) = dhcp(iface, quiet) {
+            if let Err(err) = dhcp(iface, verbose) {
                 eprintln!("dhcpd: {err}");
                 process::exit(1);
             }
             process::exit(0);
         })
         .expect("dhcpd: failed to daemonize");
-    } else if let Err(err) = dhcp(iface, quiet) {
+    } else if let Err(err) = dhcp(iface, verbose) {
         println!("Error {err}");
         eprintln!("dhcpd: {err}");
         process::exit(1);
