@@ -445,32 +445,18 @@ fn dhcp(iface: &str, verbose: bool) -> Result<(), String> {
 }
 
 fn main() {
-    let mut background = false;
     let mut verbose = false;
     let iface = "eth0";
 
     //TODO: parse iface from the args
     for arg in env::args().skip(1) {
         match arg.as_ref() {
-            "-b" => background = true,
             "-v" => verbose = true,
             _ => (),
         }
     }
 
-    if background {
-        redox_daemon::Daemon::new(move |daemon| {
-            daemon.ready().expect("failed to signal readiness");
-
-            if let Err(err) = dhcp(iface, verbose) {
-                eprintln!("dhcpd: {err}");
-                process::exit(1);
-            }
-            process::exit(0);
-        })
-        .expect("dhcpd: failed to daemonize");
-    } else if let Err(err) = dhcp(iface, verbose) {
-        println!("Error {err}");
+    if let Err(err) = dhcp(iface, verbose) {
         eprintln!("dhcpd: {err}");
         process::exit(1);
     }
