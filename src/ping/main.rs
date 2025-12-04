@@ -2,11 +2,6 @@ mod ping;
 mod stats;
 use ping::Ping;
 
-extern crate anyhow;
-extern crate clap;
-extern crate event;
-extern crate libredox;
-
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Arg, ArgAction, Command};
 use event::{user_data, EventFlags, EventQueue};
