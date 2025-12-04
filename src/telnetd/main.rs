@@ -2,18 +2,6 @@
 #![feature(asm)]
 #![feature(const_fn)]
 
-extern crate mio;
-extern crate tokio;
-extern crate tokio_reactor;
-
-#[cfg(not(target_os = "redox"))]
-extern crate libc;
-
-#[cfg(target_os = "redox")]
-extern crate syscall;
-#[cfg(target_os = "redox")]
-extern crate redox_termios;
-
 use mio::{Poll as MioPoll, Token, Ready, PollOpt};
 use mio::unix::EventedFd;
 use std::env;
@@ -175,13 +163,11 @@ fn telnet() {
 
 #[cfg(target_os = "redox")]
 fn fork()  -> usize {
-    extern crate syscall;
     unsafe { syscall::clone(0).unwrap() }
 }
 
 #[cfg(not(target_os = "redox"))]
 fn fork()  -> usize {
-    extern crate libc;
     unsafe { libc::fork() as usize }
 }
 

@@ -14,11 +14,11 @@ use anyhow::{bail, Context, Result};
 use std::cmp::Ordering;
 use std::fmt;
 
-//use DEFAULT_TTL;  // TODO : TTL
-use ECHO_PAYLOAD_SIZE;
+//use crate::DEFAULT_TTL;  // TODO : TTL
+use crate::ECHO_PAYLOAD_SIZE;
 
-use time_diff_ms;
-use PING_TIMEOUT_S;
+use crate::time_diff_ms;
+use crate::PING_TIMEOUT_S;
 
 /// A wrapper around `libredox::data::TimeSpec` that adds trait implementations
 /// like `PartialEq`, `Debug`, and ordering traits for usage in data structures.

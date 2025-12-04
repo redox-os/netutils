@@ -1,11 +1,5 @@
 #![deny(warnings)]
 
-extern crate arg_parser;
-extern crate hyper;
-extern crate hyper_rustls;
-extern crate pbr;
-extern crate url;
-
 use std::env;
 use std::fs::File;
 use std::io::{self, Read, Write};
