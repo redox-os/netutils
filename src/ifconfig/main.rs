@@ -21,7 +21,6 @@ The program supports the following options:
 
 */
 
-extern crate regex;
 use std::env;
 
 mod interface;
