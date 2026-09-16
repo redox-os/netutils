@@ -178,15 +178,14 @@ fn main() -> Result<()> {
         }
     }
 
-    let remote_host = resolve_host(&remote_host)?;
-
+    let ip = resolve_host(&remote_host)?;
     let data_size = ECHO_PAYLOAD_SIZE;
     let total_size = data_size + IP_HEADER_SIZE + ICMP_HEADER_SIZE;
     // Print the line similar to standard ping output
-    println!("PING {remote_host} ({remote_host}) {data_size}({total_size}) bytes of data.");
+    println!("PING {remote_host} ({ip}) {data_size}({total_size}) bytes of data.");
 
     // Create the path to the ICMP echo file for the remote host
-    let icmp_path = format!("/scheme/icmp/echo/{remote_host}");
+    let icmp_path = format!("/scheme/icmp/echo/{ip}");
 
     // Open the ICMP echo file in read-write, non-blocking mode
     let echo_fd = Fd::open(&icmp_path, flag::O_RDWR | flag::O_NONBLOCK, 0)
@@ -209,7 +208,7 @@ fn main() -> Result<()> {
     event_queue.subscribe(time_fd.raw(), EventSource::Time, EventFlags::READ)?;
 
     // Create a new Ping instance with the specified parameters
-    let mut ping = Ping::new(remote_host, count, interval, echo_fd, time_fd);
+    let mut ping = Ping::new(ip, count, interval, echo_fd, time_fd);
 
     // Send the first ping immediately
     let current_time = libredox::call::clock_gettime(libredox::flag::CLOCK_MONOTONIC)
